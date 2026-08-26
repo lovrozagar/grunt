@@ -41,23 +41,28 @@ function workspace() {
 const implMsg = "```js\nconst x = 1;\n```\nwrite file src/x.ts";
 
 describe("orchestrate-parent Stop", () => {
-  it("does not block cheap trivia", () => {
+  it("blocks cheap trivia", () => {
     const ws = workspace();
-    const result = runHook(
-      {
-        hookEventName: "Stop",
-        reason: "end_turn",
-        lastAssistantMessage: "Yes. HTTP is a request/response protocol.",
-        workspaceRoot: ws,
-        sessionId: "s1",
-      },
-      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: "s1" },
-    );
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
+    for (const [sid, msg] of [
+      ["s1", "Yes. HTTP is a request/response protocol."],
+      ["s1b", "4"],
+    ] as const) {
+      const result = runHook(
+        {
+          hookEventName: "Stop",
+          reason: "end_turn",
+          lastAssistantMessage: msg,
+          workspaceRoot: ws,
+          sessionId: sid,
+        },
+        { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+      );
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).decision).toBe("block");
+    }
   });
 
-  it("does not block a long definition that is not implementation-like", () => {
+  it("blocks 2+2 and long definitions that are not recap", () => {
     const ws = workspace();
     const msg =
       "An orchestrator is the parent session. It answers trivia, does tiny lookups, and spawns children. It does not implement features in-session even when the user asks for a multi-file change, because that work belongs to implementer.";
@@ -72,7 +77,7 @@ describe("orchestrate-parent Stop", () => {
       { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: "s2" },
     );
     expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stdout).decision).toBe("block");
   });
 
   it("blocks implementation-like messages until MAX_STOP=3 then fail-open", () => {
@@ -282,7 +287,7 @@ function readTelemetry(ws: string) {
 }
 
 describe("orchestrate-parent parent grunt-job bash", () => {
-  it("allows parent grunt-job --job search and --job exec", () => {
+  it("denies parent grunt-job --job search and --job exec", () => {
     const ws = workspace();
     plantGruntJob(ws);
     for (const job of ["search", "exec"] as const) {
@@ -298,7 +303,10 @@ describe("orchestrate-parent parent grunt-job bash", () => {
         { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
       );
       expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({ decision: "allow" });
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        decision: "deny",
+        reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+      });
     }
     const rtk = runHook(
       {
@@ -311,7 +319,45 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(rtk.stdout)).toMatchObject({ decision: "allow" });
+    expect(JSON.parse(rtk.stdout)).toMatchObject({ decision: "deny" });
+  });
+
+  it("denies ls; /parent then ls allowed that turn", () => {
+    const ws = workspace();
+    const lsPayload = {
+      hookEventName: "PreToolUse",
+      toolName: "run_terminal_command",
+      toolInput: { command: "ls" },
+      workspaceRoot: ws,
+      sessionId: "pe-ls",
+    };
+    const env = {
+      GROK_HOOK_EVENT: "pre_tool_use",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: "pe-ls",
+    };
+    const denied = runHook(lsPayload, env);
+    expect(JSON.parse(denied.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+    });
+    const submit = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/parent",
+        workspaceRoot: ws,
+        sessionId: "pe-ls",
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "pe-ls",
+      },
+    );
+    expect(submit.status).toBe(0);
+    const allowed = runHook(lsPayload, env);
+    expect(allowed.status).toBe(0);
+    expect(JSON.parse(allowed.stdout)).toMatchObject({ decision: "allow" });
   });
 
   it("denies ls and grunt-job --job web", () => {
@@ -383,7 +429,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(regex.stdout)).toMatchObject({ decision: "allow" });
+    expect(JSON.parse(regex.stdout)).toMatchObject({ decision: "deny" });
     const quoted = runHook(
       {
         hookEventName: "PreToolUse",
@@ -395,7 +441,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(quoted.stdout)).toMatchObject({ decision: "allow" });
+    expect(JSON.parse(quoted.stdout)).toMatchObject({ decision: "deny" });
     const pipe = runHook(
       {
         hookEventName: "PreToolUse",
@@ -646,6 +692,55 @@ describe("orchestrate-parent telemetry", () => {
     );
     expect(json.hooks.SessionStart).toBeUndefined();
     expect(JSON.stringify(json)).not.toMatch(/SessionStart/);
+  });
+
+  it("claude settings deny Agent(orchestrator); hooks.jsonc has Stop + UserPromptSubmit", () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(root, ".claude/settings.json"), "utf8"),
+    );
+    expect(settings.permissions.deny).toContain("Agent(orchestrator)");
+    const ssot = fs.readFileSync(path.join(root, ".rulesync/hooks.jsonc"), "utf8");
+    expect(ssot).toMatch(/"stop"/);
+    expect(ssot).toMatch(/"userPromptSubmit"/);
+    expect(ssot).toMatch(/orchestrate-parent\.js/);
+  });
+});
+
+describe("orchestrate-parent spawn Agent + default sid", () => {
+  it("treats Agent and spawn_agent as spawn", () => {
+    const ws = workspace();
+    for (const toolName of ["Agent", "spawn_agent"]) {
+      const result = runHook(
+        {
+          hookEventName: "PreToolUse",
+          toolName,
+          toolInput: { prompt: "ship it", subagent_type: "grunt" },
+          workspaceRoot: ws,
+        },
+        { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+      );
+      expect(result.status).toBe(0);
+      const out = JSON.parse(result.stdout);
+      expect(out.decision === "allow" || out.hookSpecificOutput).toBeTruthy();
+      expect(out.decision).not.toBe("deny");
+    }
+  });
+
+  it("stampPath falls back to sid default", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: implMsg,
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: "" },
+    );
+    expect(JSON.parse(result.stdout).decision).toBe("block");
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "stop-block-default")),
+    ).toBe(true);
   });
 });
 

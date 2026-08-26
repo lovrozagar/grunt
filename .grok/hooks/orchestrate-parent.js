@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-/** Parent-orchestrator gate: allow spawn/read/todo; deny write/edit/bash/web/MCP.
-Fat Read/Grep/Glob limits + path denylist via gate-fat-tools (one updatedInput).
-Parent bash: only node scripts/grunt-job.mjs --job search|exec [--path --glob --cwd].
+/** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan writes.
+Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
-Stop: recap [agent]: / parent-escape stamp; do not waive impl on tools-used.
+Stop: [agent]: recap | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
 Fail-open: parse/crash → empty stdout, exit 0. Explicit JSON only when denying.
 */
 import fs from "node:fs";
@@ -26,24 +25,20 @@ import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs
 const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
 const STOP_REASON =
   "parent is orchestrator; spawn grunt|implementer|thinker; do not complete in-parent";
-const ALLOWED_TOOLS = new Set([
-  "spawnsubagent",
-  "task",
+const PARENT_TOOLS = new Set([
   "todowrite",
   "getcommandorsubagentoutput",
   "gettaskoutput",
   "killcommandorsubagent",
   "killtask",
-  "readfile",
-  "read",
-  "grep",
-  "grepsearch",
-  "listdir",
-  "glob",
 ]);
-const SPAWN_TOOLS = new Set(["spawnsubagent", "task"]);
+const SPAWN_TOOLS = new Set([
+  "spawnsubagent",
+  "task",
+  "agent",
+  "spawnagent",
+]);
 const WRITE_TOOLS = new Set(["write"]);
-const BASH_TOOLS = new Set(["bash", "runterminalcommand"]);
 const READ_TOOLS = new Set(["readfile", "read"]);
 const INTERCEPT_JOBS = new Set(["search", "exec"]);
 const MAX_STOP = 3;
@@ -98,10 +93,11 @@ function preToolUse(data) {
   if (WRITE_TOOLS.has(toolKey)) {
     return parentWrite(data, toolInput);
   }
-  if (BASH_TOOLS.has(toolKey)) {
-    return parentBash(data, toolInput);
+  if (PARENT_TOOLS.has(toolKey)) {
+    emit({ decision: "allow" });
+    return 0;
   }
-  if (ALLOWED_TOOLS.has(toolKey)) {
+  if (hasParentEscape(data)) {
     const fatCode = emitFat(data);
     if (fatCode !== null) return fatCode;
     emit({ decision: "allow" });
@@ -109,6 +105,11 @@ function preToolUse(data) {
   }
   emit({ decision: "deny", reason: DENY_REASON });
   return 0;
+}
+
+function hasParentEscape(data) {
+  const p = stampPath(data, "parent-escape");
+  return Boolean(p && fs.existsSync(p));
 }
 
 function logPreTool(data, toolKey, toolInput) {
@@ -162,20 +163,6 @@ export function isUnderPlans(filePath, workspaceRoot) {
 
 export function isAllowedParentGruntJob(command, workspaceRoot) {
   return isWorkspaceGruntJob(command, workspaceRoot, ["search", "exec"]);
-}
-
-function parentBash(data, toolInput) {
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
-    emit({ decision: "deny", reason: DENY_REASON });
-    return 0;
-  }
-  const cmd = typeof toolInput.command === "string" ? toolInput.command : "";
-  if (!isAllowedParentGruntJob(cmd, workspaceRootOf(data))) {
-    emit({ decision: "deny", reason: DENY_REASON });
-    return 0;
-  }
-  emit({ decision: "allow" });
-  return 0;
 }
 
 function parentWrite(data, toolInput) {
@@ -272,8 +259,7 @@ function stop(data) {
   }
 
   const msg = data.lastAssistantMessage || data.last_assistant_message || "";
-  if (isCheap(msg) || isChildRecap(msg)) return 0;
-  if (!looksLikeImplementation(msg)) return 0;
+  if (isChildRecap(msg)) return 0;
 
   const stopStamp = stampPath(data, "stop-block");
   let n = 0;
@@ -391,36 +377,13 @@ function interceptNeed(data, hookEventName) {
   return 0;
 }
 
-function looksLikeImplementation(msg) {
-  if (typeof msg !== "string") return false;
-  const t = msg;
-  if (t.includes("```")) return true;
-  if (/(?:^|\n)(?:diff --git |--- [^\n]+\n\+\+\+ |@@ )/.test(t)) return true;
-  if (/\b(?:write|create|edit)[-_ ]file\b/i.test(t)) return true;
-  const patchLines = t.split(/\n/).filter((l) => /^[+-](?![+-])/.test(l)).length;
-  if (patchLines >= 8) return true;
-  return false;
-}
-
-function isCheap(msg) {
-  if (typeof msg !== "string") return false;
-  const t = msg.trim();
-  if (!t || t.length > 500) return false;
-  if (t.includes("```")) return false;
-  const sentences = t.split(/(?<=[.!?])(?:\s+|$)/).filter((s) => s.trim());
-  if (sentences.length > 2) return false;
-  const lines = t.split(/\n/).filter((l) => l.trim());
-  return lines.length <= 4;
-}
-
 function stampPath(data, prefix) {
-  const root =
-    process.env.GROK_WORKSPACE_ROOT ||
-    (data && (data.workspaceRoot || data.workspace_root)) ||
-    "";
+  const root = workspaceRootOf(data);
   const sid =
-    process.env.GROK_SESSION_ID || (data && (data.sessionId || data.session_id)) || "";
-  if (!root || !sid) return null;
+    process.env.GROK_SESSION_ID ||
+    (data && (data.sessionId || data.session_id)) ||
+    "default";
+  if (!root) return null;
   return path.join(root, ORCHESTRATOR_LOGS_DIR, prefix + "-" + sid);
 }
 

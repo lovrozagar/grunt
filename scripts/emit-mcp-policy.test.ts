@@ -146,6 +146,8 @@ describe("emitMcpPolicy", () => {
     expect(claude.enabledMcpjsonServers).toEqual([]);
     expect(claude.permissions.deny).toContain("mcp__*");
     expect(claude.permissions.deny).toContain("Agent(Explore)");
+    expect(claude.permissions.deny).toContain("Agent(orchestrator)");
+    expect(claude.permissions.deny).toContain("Agent(Plan)");
     expect(claude.hooks).toBeTruthy();
 
     const codex = parseToml(fs.readFileSync(path.join(ws, ".codex/config.toml"), "utf8")) as {

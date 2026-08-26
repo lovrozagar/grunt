@@ -4,6 +4,7 @@
       "Agent(Explore)",
       "Agent(Plan)",
       "Agent(general-purpose)",
+      "Agent(orchestrator)",
       "mcp__*"
     ]
   },

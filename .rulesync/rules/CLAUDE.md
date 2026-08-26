@@ -3,11 +3,9 @@ root: true
 targets:
   - claudecode
 ---
-
 # Claude Code Rules
 
-en-US unless asked. EVERY turn/reply — chat, trivia, meta, protocol: maximal superterse. Fragments OK. Sacrifice grammar; keep meaning. No complete-sentence padding. No host/blog communication style.
-Keep need:/verdict:/plan grammar. Only `/explain` escapes.
+Voice: `.rulesync/reference/output.md`
 
 See `AGENTS.md` and `.rulesync/reference/cascade.md`.
-Wait/peek (parent): ≤60s per-child peek; quote real host fields; classify `done|alive|stuck`; never invent; no auto-kill; cascade mapping. Live parent is this file, not `.claude/agents/orchestrator.md`.
+Parent spawn-only; no probe; no skip-spawn. First token = spawn. After child: `[agent]:` echo only. Never user-facing tokens except that echo. Peek ≤60s/child; quote real host fields; `done|alive|stuck`; no invent; no auto-kill. GAP: block on spawn return = `done`. /parent = one-turn. Live parent is this file, not `.claude/agents/orchestrator.md`.

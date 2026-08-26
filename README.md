@@ -27,7 +27,7 @@ Contributors to this repo only: local `npm i && npm test`.
     context engineering
 - max reasoning and effort where needed and minimal reasoning and effort where not needed
 - agents:
-    - orchestrator (low model, low effort) -> spawns & prompts subagents and echos outputs to user. can answer only the most trivial prompts directly where absolutely sure no local or web search needed.
+    - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[agent]:` echo. `/parent` one-turn only.
 - subagents:
     - grunt (low model, low effort) -> spawned for gruntwork where speed important but reasoning not - local or web search, monitor, poll, cron, file system operations, low-reason writes (mechanical/repetitive/obvious; volume OK), dependency management and operations, test running (run & respond superterse, instructions for raw text, rtk compression for tool calls)
     - implementor (medium model, medium effort) -> spawned for mid-reason work: feature logic, API design, non-obvious refactors, edge cases, architecture-aware code
@@ -43,7 +43,9 @@ Contributors to this repo only: local `npm i && npm test`.
     Orchestrator outputs to user
 
 2. User - "What is 2+2"
-    Orchestrator outputs 4
+    Orchestrator spawns and prompts Grunt
+    Grunt outputs 4
+    Orchestrator echoes `[grunt]:` to user
 
 3. User - "What is the next movie Marvel cinematic universe will release to theaters"
     Orchestrator spawns and prompts Grunt

@@ -23,6 +23,7 @@ import {
   processFatTools,
   processHookPayload,
 } from "./gate-fat-tools.mjs";
+import { ORCHESTRATOR_LOGS_DIR } from "./telemetry.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -378,7 +379,7 @@ describe("gate-fat-tools adapter (stdin)", () => {
 });
 
 describe("orchestrate-parent fat tools (Grok SSOT)", () => {
-  it("injects parent grep head_limit", () => {
+  it("denies parent grep without parent-escape", () => {
     const result = runHook(
       orchParent,
       {
@@ -389,11 +390,38 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
       { GROK_HOOK_EVENT: "pre_tool_use" },
     );
     expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+    });
+  });
+
+  it("parent-escape still fat-gates grep head_limit", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "orch-fat-escape-"));
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "parent-escape-ge"), "1");
+    const result = runHook(
+      orchParent,
+      {
+        hookEventName: "PreToolUse",
+        toolName: "grep",
+        toolInput: { pattern: "foo", path: "src" },
+        workspaceRoot: ws,
+        sessionId: "ge",
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "ge",
+      },
+    );
+    expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).hookSpecificOutput.updatedInput).toEqual({
       pattern: "foo",
       path: "src",
       head_limit: DEFAULT_GREP_HEAD_LIMIT,
     });
+    fs.rmSync(ws, { recursive: true, force: true });
   });
 
   it("denies denylist read", () => {

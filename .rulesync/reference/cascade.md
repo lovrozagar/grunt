@@ -8,25 +8,18 @@ Shipped protocol: **parent-only spawn**. Only the parent **orchestrator** sessio
 
 ## Parent orchestrator
 
-1. Super-trivial / yes-no / definition-from-prompt with zero tools **and absolutely sure** → parent answers; no grunt/child. Parent does not web_search. `2+2` → answer.
-2. Not absolutely sure / fresh or world facts → spawn grunt `job: web`. Do not answer from memory.
-3. Cheap reply already in context: answer. No tools.
-4. Tiny lookup (one file, ≤10-hit grep, list_dir): do it here. No bash. Do not spawn. Limits auto-injected; denylist / file>200KB / head_limit>500 → spawn grunt.
-5. Fat dump: `spawn_subagent` type=grunt with `job: search|exec|web|test`. Isolated window. Expect `verdict:`.
-6. Low-reason write (mechanical/repetitive/obvious; volume OK): spawn grunt. Mid reason / feature judgment: spawn implementer. Design / architecture / hard debug: spawn thinker.
-7. Unsure → implementer.
+Always spawn + prompt. First token = spawn. No try-then-spawn. No parent probe. No tiny-read/grep/list_dir/bash/grunt-job for the user. No skip-spawn. `/parent` is the only parent-tool escape.
+
+1. Facts / search / exec / git / web / test / low-reason write → grunt.
+2. Mid-reason / feature / unsure → implementer.
+3. Design / architecture / hard debug → thinker.
+4. Fresh/world facts → grunt `job: web`. Never answer from memory.
 
 Spawn only `grunt` | `implementer` | `thinker`. Omit `model`. Isolation `none` unless asked.
 
-Implementer/thinker may tiny-Read/Grep/list_dir themselves. `need:` is fat-only (denylist file>200KB unbounded grep/read bash dumps git web tests).
+Implementer/thinker may tiny-Read/Grep/list_dir themselves. Fat dumps via `need:` JSON.
 
 Long parent sessions rely on two-pass compaction; prefer a new parent session per task rather than unbounded resume chains. `[features] two_pass_compaction = true` must live in `~/.grok/config.toml` (from `.grok/global-settings.toml` via `npm run sync:globals` dry-run / `npm run sync:globals:apply`). Project `.grok/config.toml` cannot set `[features]`. Do not add a SessionStart hook.
-
-## Pre-spawn
-
-If dumps are known (paths, rg, test cmd): parent and implementer run `node scripts/grunt-job.mjs --job search|exec --query …` in-session and pass those `verdict:` blobs into the child prompt. Optional `--path` `--glob` (repeatable) `--cwd`. `--query` is one argv; regex `|` OK. Never `cd &&`. Unknown flags or exec shell-meta in query → FALLBACK (exit 2). Do not start the child and `need:` for a dump already known. Thinker stays read-only (no bash): fat search|exec via `need:` + SubagentStop intercept.
-
-For spawned grunt `job: search|exec`, first action is still `node scripts/grunt-job.mjs --job search|exec --query …` and echo stdout as the whole reply. Bounded `job: test` may try the same script (`--job test`); `job: web` and messy `job: test` stay LLM grunt. If the script prints `FALLBACK` (exit 2), LLM grunt may use tools.
 
 ## Wait / peek
 
@@ -37,8 +30,8 @@ Classify `done` | `alive` | `stuck` vs prior peek: **done** (completed/failed), 
 Loop until done. No auto-kill. Kill only if the user asks and the host has a kill tool.
 Then print recap as `[agent]: …` with real child output. Do not redo the child's work.
 
-Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Allow cheap trivia, `[grunt|implementer|thinker]:` recap prefix, or consume `parent-escape-{sid}` once. Else block.
-`/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/cheap/recap rules. Skills point here; do not paste this file.
+Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Allow only `[grunt|implementer|thinker]:` recap prefix, or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
+`/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/recap rules. Skills point here; do not paste this file.
 
 Host mapping (in-tree only; do not invent peek/kill APIs). GAP rows: no fake peeks, no auto-kill.
 
@@ -66,7 +59,7 @@ Parent: parse with `scripts/parse-need.mjs` (same grammar). If parse succeeds, f
 
 Resume prompt = `You are {agent} subagent.` plus the new verdicts. Do not re-send the original task, cascade, or prior verdicts (`resume_from` already has the transcript).
 
-Superterse does not change need:/verdict:/plan grammar.
+Voice: [output](output.md). Does not change need:/verdict:/plan grammar.
 
 ## Isolation grunt `verdict:`
 
@@ -78,7 +71,7 @@ n: <count>
 
 Fail: first 3 error lines. ≤8 lines. No dumps, recap, HTML, JSON, full logs.
 
-Implementer/thinker: fat dumps via `need:` JSON. Implementer shell via rtk; cat/rg/curl/tests without rtk → fat `need:`. For search|exec that already fits 8-line `verdict:`, implementer runs `node scripts/grunt-job.mjs` in-session instead of `need:` (`--path`/`--glob`/`--cwd` OK; never `cd &&`).
+Implementer/thinker: fat dumps via `need:` JSON. Implementer shell via rtk; cat/rg/curl/tests without rtk → fat `need:`.
 
 Child prompt = `You are {agent} subagent.` + task + abs paths + verdicts only.
 

@@ -11,12 +11,13 @@ Cheap outline. Not a file dump.
 - `.rulesync/reference/rtk.md` — shell compression
 - `.rulesync/reference/hooks.md` — hook policy
 - `.rulesync/reference/map.md` — this file
+- `.rulesync/reference/output.md` — default voice
 
 ## Agent SSOT
 - `.rulesync/subagents/{orchestrator,implementer,thinker,grunt}.md`
 - `.rulesync/rules/overview.md` → `AGENTS.md`
 - `.rulesync/rules/CLAUDE.md` → `CLAUDE.md`
-- Default output (overview.md → AGENTS.md; also agent bodies + CLAUDE.md, not auto-injected): EVERY turn/reply — chat, trivia, meta, protocol: maximal superterse; fragments OK; no complete-sentence padding; no host/blog communication style; keep need:/verdict:/plan grammar; only `/explain` escapes.
+- Default output: `.rulesync/reference/output.md` (overview.md → AGENTS.md; also agent bodies + CLAUDE.md, not auto-injected)
 
 ## Grok hand files
 - `.grok/hooks/orchestrate-parent.js` + `orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
