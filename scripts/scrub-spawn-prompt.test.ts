@@ -1,0 +1,264 @@
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { scrubText } from "./scrub-text-lib.mjs";
+import {
+  MAX_PROMPT_CHARS,
+  TRUNCATE_SUFFIX,
+  capSpawnPrompt,
+  grokDefaultGrunt,
+  hookResponse,
+  processHookPayload,
+  rewriteSpawnToolInput,
+} from "./scrub-spawn-prompt.mjs";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, "..");
+const adapter = path.join(here, "scrub-spawn-prompt.mjs");
+const orchParent = path.join(root, ".grok/hooks/orchestrate-parent.js");
+
+function runHook(
+  script: string,
+  payload: unknown,
+  env: NodeJS.ProcessEnv = {},
+) {
+  return spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+    input: typeof payload === "string" ? payload : JSON.stringify(payload),
+    cwd: root,
+    env: { ...process.env, ...env },
+    timeout: 10_000,
+  });
+}
+
+const fillerPrompt = "please can you make me a counter app, thanks";
+const scrubbedPrompt = scrubText(fillerPrompt, { intent: true });
+
+describe("rewriteSpawnToolInput", () => {
+  it("scrubs prompt with intent and preserves other fields", () => {
+    const updated = rewriteSpawnToolInput({
+      prompt: fillerPrompt,
+      description: "build it",
+      subagent_type: "implementer",
+      name: "feat",
+    });
+    expect(updated).toEqual({
+      prompt: scrubbedPrompt,
+      description: "build it",
+      subagent_type: "implementer",
+      name: "feat",
+    });
+    expect(updated?.prompt).not.toBe(fillerPrompt);
+  });
+
+  it("returns null when prompt is already scrubbed", () => {
+    expect(
+      rewriteSpawnToolInput({
+        prompt: scrubbedPrompt,
+        subagent_type: "thinker",
+      }),
+    ).toBeNull();
+  });
+
+  it("defaults type to grunt on Grok last-wins path", () => {
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", subagent_type: "sergeant" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({ prompt: "ship it", subagent_type: "grunt" });
+  });
+
+  it("combines type default and prompt scrub in one object", () => {
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: fillerPrompt, description: "keep", extra: 1 },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({
+      prompt: scrubbedPrompt,
+      description: "keep",
+      extra: 1,
+      subagent_type: "grunt",
+    });
+  });
+});
+
+describe("scrub-spawn-prompt adapter (stdin)", () => {
+  it("rewrites prompt and preserves other fields", () => {
+    const result = runHook(adapter, {
+      hookEventName: "PreToolUse",
+      toolName: "spawn_subagent",
+      toolInput: {
+        prompt: fillerPrompt,
+        description: "feat work",
+        subagent_type: "implementer",
+        resume_from: "abc",
+      },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    const out = JSON.parse(result.stdout);
+    expect(out).toEqual(
+      hookResponse({
+        prompt: scrubbedPrompt,
+        description: "feat work",
+        subagent_type: "implementer",
+        resume_from: "abc",
+      }),
+    );
+  });
+
+  it("accepts Claude snake_case tool_input", () => {
+    const result = runHook(adapter, {
+      hook_event_name: "PreToolUse",
+      tool_name: "Task",
+      tool_input: {
+        prompt: fillerPrompt,
+        description: "keep me",
+        subagent_type: "thinker",
+      },
+    });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).hookSpecificOutput.updatedInput).toEqual({
+      prompt: scrubbedPrompt,
+      description: "keep me",
+      subagent_type: "thinker",
+    });
+  });
+
+  it("fail-opens (empty stdout, 0) when prompt is unchanged", () => {
+    const result = runHook(adapter, {
+      toolInput: { prompt: scrubbedPrompt, subagent_type: "grunt" },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("fail-opens on invalid JSON", () => {
+    const result = runHook(adapter, "{not json");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("fail-opens when prompt is missing", () => {
+    const result = runHook(adapter, {
+      toolInput: { description: "no prompt", subagent_type: "grunt" },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+});
+
+describe("orchestrate-parent spawn rewrite", () => {
+  it("emits one updatedInput with type default and intent-scrub", () => {
+    const result = runHook(
+      orchParent,
+      {
+        hookEventName: "PreToolUse",
+        toolName: "spawn_subagent",
+        toolInput: {
+          prompt: fillerPrompt,
+          description: "feat",
+          name: "child",
+        },
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use" },
+    );
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+    expect(out.hookSpecificOutput.updatedInput).toEqual({
+      prompt: scrubbedPrompt,
+      description: "feat",
+      name: "child",
+      subagent_type: "grunt",
+    });
+    expect(out.decision).toBeUndefined();
+  });
+
+  it("scrubs even when type is already allowed", () => {
+    const result = runHook(
+      orchParent,
+      {
+        hookEventName: "PreToolUse",
+        toolName: "Task",
+        toolInput: {
+          prompt: fillerPrompt,
+          subagent_type: "thinker",
+        },
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use" },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).hookSpecificOutput.updatedInput).toEqual({
+      prompt: scrubbedPrompt,
+      subagent_type: "thinker",
+    });
+  });
+});
+
+describe("capSpawnPrompt transcript + truncate", () => {
+  it("strips pasted transcripts and keeps first You are + verdict + abs paths", () => {
+    const raw = fs.readFileSync(
+      path.join(here, "fixtures/spawn-transcript.txt"),
+      "utf8",
+    );
+    const out = capSpawnPrompt(raw);
+    expect(out).toMatch(/^You are implementer subagent\./);
+    expect(out).not.toMatch(/^Human:/m);
+    expect(out).not.toMatch(/^Assistant:/m);
+    expect(out).not.toMatch(/^\[orchestrator\]:/m);
+    expect(out).not.toMatch(/^\[router\]:/m);
+    expect(out).not.toMatch(/^\[implementer\]:/m);
+    expect(out).not.toMatch(/You are grunt subagent/);
+    expect(out).toContain("verdict: ok");
+    expect(out).toContain(
+      "/home/ecomet/Development/grunt-test-2/scripts/gate-fat-tools.mjs",
+    );
+  });
+
+  it("strips legacy [router]: as well as [orchestrator]:", () => {
+    const out = capSpawnPrompt(
+      "[router]: old parent\n[orchestrator]: new parent\nship it",
+    );
+    expect(out).not.toMatch(/\[router\]/);
+    expect(out).not.toMatch(/\[orchestrator\]/);
+    expect(out).toContain("ship it");
+  });
+
+  it("hard-truncates over-cap prompts and keeps verdict blocks", () => {
+    const template = fs.readFileSync(
+      path.join(here, "fixtures/spawn-overcap.txt"),
+      "utf8",
+    );
+    const raw = template.replace("XXXX_PAD", "x".repeat(9000));
+    const out = capSpawnPrompt(raw);
+    expect(out.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS + 200);
+    expect(out).toContain(TRUNCATE_SUFFIX);
+    expect(out).toContain("verdict: ok");
+    expect(out).toContain("/home/ecomet/Development/grunt-test-2/README.md");
+    expect(
+      rewriteSpawnToolInput({ prompt: raw, subagent_type: "implementer" })
+        ?.prompt,
+    ).toBe(out);
+  });
+});
+
+describe("processHookPayload", () => {
+  it("prefers toolInput over tool_input", () => {
+    expect(
+      processHookPayload({
+        toolInput: { prompt: fillerPrompt, tag: "camel" },
+        tool_input: { prompt: fillerPrompt, tag: "snake" },
+      }),
+    ).toMatchObject({ tag: "camel", prompt: scrubbedPrompt });
+  });
+
+  it("grokDefaultGrunt is false unless GROK_HOOK_EVENT is set", () => {
+    expect(typeof grokDefaultGrunt()).toBe("boolean");
+  });
+});

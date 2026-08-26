@@ -1,0 +1,5 @@
+description = "Medium reasoning role"
+default_capability_mode = "all"
+reasoning_effort = "medium"
+model = "grok-4.6"
+default_fork_context = false

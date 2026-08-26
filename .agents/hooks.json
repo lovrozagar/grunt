@@ -1,0 +1,26 @@
+{
+  "rulesync": {
+    "PreToolUse": [
+      {
+        "matcher": "spawn_subagent|Task|Agent|spawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/scrub-spawn-prompt.mjs\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/gate-fat-tools.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

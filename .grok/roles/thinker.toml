@@ -1,0 +1,5 @@
+description = "Deep reasoner role"
+default_capability_mode = "read-only"
+reasoning_effort = "high"
+model = "grok-4.6"
+default_fork_context = false

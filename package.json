@@ -1,0 +1,76 @@
+{
+  "name": "@lovrozagar/grunt",
+  "version": "0.1.0",
+  "description": "Multi-agent orchestrator SoT — deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
+  "keywords": [
+    "agents",
+    "grunt",
+    "orchestrator",
+    "rulesync"
+  ],
+  "homepage": "https://github.com/lovrozagar/grunt#readme",
+  "bugs": {
+    "url": "https://github.com/lovrozagar/grunt/issues"
+  },
+  "license": "MIT",
+  "author": "lovrozagar",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lovrozagar/grunt.git"
+  },
+  "bin": {
+    "grunt": "./bin/grunt.js"
+  },
+  "files": [
+    "bin/grunt.js",
+    "cli",
+    "scripts/check-globals.mjs",
+    "scripts/emit-mcp-policy.mjs",
+    "scripts/gate-fat-tools.mjs",
+    "scripts/grunt-job.mjs",
+    "scripts/parse-need.mjs",
+    "scripts/persist-plan.mjs",
+    "scripts/purge-global-mcps.mjs",
+    "scripts/scrub-spawn-prompt.mjs",
+    "scripts/scrub-text-lib.mjs",
+    "scripts/sync-global-settings.mjs",
+    "scripts/telemetry.mjs",
+    "scripts/scrub-text",
+    ".rulesync",
+    ".grok",
+    ".codex",
+    ".claude",
+    ".agents",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".mcp.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "rulesync:generate": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs",
+    "rulesync:watch": "node scripts/emit-mcp-policy.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents --watch",
+    "rulesync:check": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents --check && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks --check && node scripts/emit-mcp-policy.mjs --check && node scripts/check-globals.mjs",
+    "rulesync:doctor": "rulesync doctor",
+    "sync:globals": "node scripts/sync-global-settings.mjs",
+    "sync:globals:check": "node scripts/check-globals.mjs",
+    "sync:globals:apply": "node scripts/sync-global-settings.mjs --apply",
+    "purge:global-mcps": "node scripts/purge-global-mcps.mjs",
+    "purge:global-mcps:apply": "node scripts/purge-global-mcps.mjs --apply",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "rulesync": "latest",
+    "smol-toml": "^1.8.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "hooks": {
+    // Claude / Codex / Antigravity only (generate -t omits grokcli for hooks).
+    // Grok spawn/fat SSOT is hand-placed .grok/hooks/orchestrate-parent.js + orchestrate-parent.json.
+    "preToolUse": [
+      {
+        "matcher": "spawn_subagent|Task|Agent|spawn_agent",
+        "type": "command",
+        "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/scrub-spawn-prompt.mjs\"",
+        "timeout": 5
+      },
+      {
+        // Fat Read/Grep/Glob/Bash: inject limits, path denylist, implementer dump deny.
+        "matcher": "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+        "type": "command",
+        "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/gate-fat-tools.mjs\"",
+        "timeout": 5
+      }
+    ]
+  }
+}
