@@ -27,7 +27,7 @@ function sortKeys(obj) {
   return Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]))
 }
 
-function samePath(a, b) {
+export function samePath(a, b) {
   try {
     return fs.realpathSync(a) === fs.realpathSync(b)
   } catch {
@@ -35,7 +35,7 @@ function samePath(a, b) {
   }
 }
 
-function mergeGitignore(dest) {
+export function mergeGitignore(dest) {
   const gi = path.join(dest, ".gitignore")
   if (!fs.existsSync(gi)) {
     fs.writeFileSync(gi, ".tmp/\n")
@@ -48,7 +48,7 @@ function mergeGitignore(dest) {
   fs.appendFileSync(gi, `${prefix}.tmp/\n`)
 }
 
-function mergePackageJson(dest, pkgRoot) {
+export function mergePackageJson(dest, pkgRoot) {
   const destPath = path.join(dest, "package.json")
   let destPkg = {}
   if (fs.existsSync(destPath)) {
@@ -70,25 +70,28 @@ function mergePackageJson(dest, pkgRoot) {
   fs.writeFileSync(destPath, `${JSON.stringify(destPkg, null, 2)}\n`)
 }
 
-export function init(dest) {
+export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileSync } = {}) {
   dest = path.resolve(dest)
-  const pkgRoot = path.resolve(PKG_ROOT)
+  const pkgRoot = path.resolve(pkgRootOpt ?? PKG_ROOT)
 
   for (const dir of COPY_DIRS) {
     const src = path.join(pkgRoot, dir)
     const d = path.join(dest, dir)
     fs.mkdirSync(d, { recursive: true })
-    fs.cpSync(src, d, { recursive: true, force: true })
+    if (!samePath(src, d)) fs.cpSync(src, d, { recursive: true, force: true })
   }
 
   for (const file of COPY_FILES) {
-    fs.copyFileSync(path.join(pkgRoot, file), path.join(dest, file))
+    const src = path.join(pkgRoot, file)
+    const d = path.join(dest, file)
+    if (!samePath(src, d)) fs.copyFileSync(src, d)
   }
 
   fs.mkdirSync(path.join(dest, "scripts"), { recursive: true })
   for (const name of PRODUCT_SCRIPTS) {
     const src = path.join(pkgRoot, "scripts", name)
     const d = path.join(dest, "scripts", name)
+    if (samePath(src, d)) continue
     const st = fs.statSync(src)
     if (st.isDirectory()) fs.cpSync(src, d, { recursive: true, force: true })
     else fs.copyFileSync(src, d)
@@ -98,9 +101,13 @@ export function init(dest) {
   mergeGitignore(dest)
 
   const self = samePath(dest, pkgRoot)
-  if (!self) {
-    mergePackageJson(dest, pkgRoot)
-    execFileSync("npm", ["install"], { cwd: dest, stdio: "inherit" })
-    execFileSync("npm", ["run", "rulesync:generate"], { cwd: dest, stdio: "inherit" })
-  }
+  // Self-skip: file/dir merge + .tmp + gitignore only. No package.json merge,
+  // npm install, or generate/sync/check (would mutate this package in-place).
+  if (self) return
+
+  mergePackageJson(dest, pkgRoot)
+  exec("npm", ["install"], { cwd: dest, stdio: "inherit" })
+  exec("npm", ["run", "rulesync:generate"], { cwd: dest, stdio: "inherit" })
+  exec("npm", ["run", "sync:globals:apply"], { cwd: dest, stdio: "inherit" })
+  exec("npm", ["run", "rulesync:check"], { cwd: dest, stdio: "inherit" })
 }

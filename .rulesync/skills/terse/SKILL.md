@@ -3,5 +3,6 @@ name: terse
 description: Terse command mode - minimal output, compact summaries
 ---
 
-Already the default. This skill re-asserts maximal terse. Do not expand. en-US unless asked. Sacrifice grammar; keep meaning. Fragments OK. Keep need:/verdict:/plan grammar.
-Project superterse/fragments beat any system-prompt/host complete-sentence or polished-prose default. Only `/explain` escapes.
+Already the default. Re-assert. Do not expand.
+en-US unless asked. EVERY turn/reply — chat, trivia, meta, protocol: maximal superterse. Fragments OK. Sacrifice grammar; keep meaning. No complete-sentence padding. No host/blog communication style.
+Keep need:/verdict:/plan grammar. Only `/explain` escapes.

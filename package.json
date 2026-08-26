@@ -1,6 +1,6 @@
 {
   "name": "@lovrozagar/grunt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-agent orchestrator SoT — deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
   "keywords": [
     "agents",
@@ -61,10 +61,11 @@
     "sync:globals:apply": "node scripts/sync-global-settings.mjs --apply",
     "purge:global-mcps": "node scripts/purge-global-mcps.mjs",
     "purge:global-mcps:apply": "node scripts/purge-global-mcps.mjs --apply",
-    "test": "vitest run"
+    "test": "vitest run --coverage"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "^3.2.7",
     "rulesync": "latest",
     "smol-toml": "^1.8.0",
     "typescript": "^5.9.3",

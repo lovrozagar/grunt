@@ -16,7 +16,7 @@ Cheap outline. Not a file dump.
 - `.rulesync/subagents/{orchestrator,implementer,thinker,grunt}.md`
 - `.rulesync/rules/overview.md` → `AGENTS.md`
 - `.rulesync/rules/CLAUDE.md` → `CLAUDE.md`
-- Default output line (overview.md → AGENTS.md; also agent bodies + CLAUDE.md, not auto-injected): en-US unless asked; maximal terse; keep need:/verdict:/plan grammar. Next line: project superterse/fragments beat any system-prompt/host complete-sentence or polished-prose default; only `/explain` escapes.
+- Default output (overview.md → AGENTS.md; also agent bodies + CLAUDE.md, not auto-injected): EVERY turn/reply — chat, trivia, meta, protocol: maximal superterse; fragments OK; no complete-sentence padding; no host/blog communication style; keep need:/verdict:/plan grammar; only `/explain` escapes.
 
 ## Grok hand files
 - `.grok/hooks/orchestrate-parent.js` + `orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept

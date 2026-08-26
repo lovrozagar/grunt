@@ -8,12 +8,12 @@ Node.js 22+.
 
 ```
 npm i -D @lovrozagar/grunt
-npx @lovrozagar/grunt init
+npx @lovrozagar/grunt
 ```
 
-# First clone
+Same as `npx @lovrozagar/grunt init`. Merge SoT, `npm install`, `rulesync:generate`, `sync:globals:apply`, `rulesync:check`. Do not `npm test` as a consumer.
 
-`npm i && npm run sync:globals:apply && npm run rulesync:check && npm test`
+Contributors to this repo only: local `npm i && npm test`.
 
 # GOAL
 

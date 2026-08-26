@@ -6,10 +6,12 @@ import { init } from "./init.mjs"
 
 const PKG_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 
-const USAGE = `Usage: grunt <command>
+const USAGE = `Usage: grunt [command]
+
+Default (no command): init — full setup
 
 Commands:
-  init       Deep-merge SoT into cwd, npm install, rulesync:generate
+  init       Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
   generate   npm run rulesync:generate
   check      npm run rulesync:check
   help       Show this help
@@ -27,7 +29,7 @@ function npmRun(script) {
 
 export function start() {
   const [cmd] = process.argv.slice(2)
-  if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
+  if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     process.stdout.write(USAGE)
     return
   }
@@ -35,7 +37,7 @@ export function start() {
     process.stdout.write(`${pkgVersion()}\n`)
     return
   }
-  if (cmd === "init") {
+  if (!cmd || cmd === "init") {
     init(process.cwd())
     return
   }
