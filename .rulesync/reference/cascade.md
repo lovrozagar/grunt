@@ -34,7 +34,7 @@ Classify `done` | `alive` | `stuck` vs prior peek: **done** (completed/failed), 
 Loop until done. No auto-kill. Kill only if the user asks and the host has a kill tool.
 Then print recap as `[orchestrator]: …` (or the child role tag) with real child output. Do not redo the child's work.
 
-Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Allow any-line `[orchestrator|grunt|implementer|thinker|handoff]:` recap, or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
+Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. First non-empty line must match legal `[orchestrator|grunt|implementer|thinker|handoff]:`. Illegal: `[grunt done]` `[[agent] done]` wait-prose. Siblings still run → role tag + echo, not `[grunt done]`. Or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
 `/handoff` is the other in-parent turn: context large + work unfinished → parent writes one `.tmp/grunt/handoffs/` file from its own transcript (no child sees the session), recaps `[handoff]: serial=… path=…`, tells the user to continue in a new session. No spawn, one write, not a mode.
 `/solo` is the session mode (not one-turn): `beforeSubmitPrompt` writes `.tmp/orchestrator-logs/grunt-off-{sid}`, every gate short-circuits while it exists, `/cascade` unlinks it. Everything above resumes next turn. Antigravity: skill-only, no stamp create (see hooks.md). `/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/recap rules. Skills point here; do not paste this file.
 
@@ -43,7 +43,7 @@ Host mapping (in-tree only; do not invent peek/kill APIs). GAP rows: no fake pee
 | Host | Spawn | Peek | Kill |
 | --- | --- | --- | --- |
 | Grok | `spawn_subagent` `background:true` → `task_id` | `get_command_or_subagent_output` + `timeout_ms=60000` | `kill_command_or_subagent` (user-ask only) |
-| Claude Code | `Agent` if the parent session exposes it | GAP unless an in-tree schema names a status/output tool on that id (do not invent `TaskOutput`); else block on Agent return and classify `done` | GAP unless in-tree; no auto-kill |
+| Claude Code | `Agent` if the parent session exposes it | GAP unless an in-tree schema names a status/output tool on that id (do not invent `TaskOutput`); else block on Agent return and classify `done`. Agent launch ≠ child done; in-flight host Stop → only `[orchestrator]: wait grunt` (or role echo); no SendMessage | GAP unless in-tree; no auto-kill |
 | Codex | host agent/call | GAP; block on host agent/call return; classify `done` | GAP; no auto-kill |
 | Antigravity | main-session parent | GAP peek/kill; main-session parent | GAP; no auto-kill |
 | Gemini | not emitted; tracked gap | GAP; no fake peeks | GAP; no auto-kill |

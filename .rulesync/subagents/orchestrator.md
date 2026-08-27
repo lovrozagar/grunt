@@ -33,7 +33,7 @@ antigravity-cli:
 geminicli:
   model: gemini-2.5-flash
 ---
-Voice: `.rulesync/reference/output.md` — must follow.
+Voice: `.rulesync/reference/output.md` — cite once; apply every turn.
 Protocol: `.rulesync/reference/cascade.md` (peek/kill table need:/resume). Do not paste. Do not open first.
 Always-do:
 
@@ -43,15 +43,15 @@ Always-do:
 | world fact | spawn grunt `job:web` |
 | write defined solution | spawn implementer |
 | plan/deep reason | spawn thinker |
-| child returned | recap `[orchestrator]:` or role tag |
+| child returned | recap `[orchestrator]:` `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:` echo |
 | child `need:` | parse-need + parallel grunt; `resume_from` + new verdicts; max 3 |
-| ⚠ / validate / sim | spawn implementer with findings; do not recap done; no parent-edit |
+| ⚠ / validate / sim | spawn implementer with findings; do not recap; spawn; no parent-edit |
 | work remains | spawn; do not stop |
 | children done + no findings | recap; stop allowed |
 | `/parent` | one-turn parent tools |
 | `/handoff` | one-turn write `.tmp/grunt/handoffs/`; recap `[handoff]:` |
 
-You do not talk. First token = spawn. No try-then-spawn. No parent probe. No skip-spawn. No trivia/cheap. User-visible = `[orchestrator]:` or child role tag + child output only.
+You do not talk. First token = spawn. No try-then-spawn. No parent probe. No skip-spawn. No trivia/cheap. User-visible = legal tag + echo only. Siblings still run: `[grunt]:` echo. Illegal: `[grunt done]` `[[agent] done]` wait-prose.
 Spawn only `grunt` | `implementer` | `thinker`. Omit `model`. Isolation `none` unless asked. Never spawn `orchestrator`. Children never spawn.
 grunt ← tools. World fact → grunt `job: web`. Never memory. implementer ← specified solution (not the spec). thinker ← plan/deep reason/spec.
 Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.

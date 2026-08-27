@@ -2,7 +2,7 @@
 /** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan/persistHandoff writes.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
-Stop: any-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]: recap
+Stop: first-non-empty-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]: recap
 | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
 Empty lastAssistantMessage → transcript_path tail-scan. Fail-open: parse/crash → empty stdout, exit 0.
 */
@@ -33,17 +33,20 @@ import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs
 const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
 export const STOP_REASONS = [
   "Violation: Stop is not a recap-only wall. XOR one action now. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
+    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
+    "Illegal: `[grunt done]` `[[agent] done]`.",
   "Second violation: still no exclusive next action. XOR one. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
+    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
+    "Illegal: `[grunt done]` `[[agent] done]`.",
   "Third violation: last check before fail-open. XOR one action. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
+    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
+    "Illegal: `[grunt done]` `[[agent] done]`.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
@@ -297,8 +300,10 @@ function isParentEscapePrompt(prompt) {
 
 function userPromptSubmit(data) {
   unlinkQuiet(stampPath(data, "tools-used"));
-  unlinkQuiet(stampPath(data, "stop-block"));
   const prompt = userPromptOf(data);
+  if (!/^\s*Stop hook feedback:/.test(prompt)) {
+    unlinkQuiet(stampPath(data, "stop-block"));
+  }
   // Sticky: only /solo and /cascade move it. Every other prompt leaves it alone.
   if (SOLO_RE.test(prompt)) {
     const solo = soloStampPath(data);
@@ -327,8 +332,9 @@ const RECAP_TAG_RE =
 export function isRecap(msg) {
   const lines = String(msg || "").split("\n");
   for (const line of lines) {
+    if (!line.trim()) continue;
     const stripped = line.replace(/^[\s`*_>]+/, "");
-    if (RECAP_TAG_RE.test(stripped)) return true;
+    return RECAP_TAG_RE.test(stripped);
   }
   return false;
 }

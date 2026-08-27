@@ -216,7 +216,34 @@ describe("orchestrate-parent Stop", () => {
     expect(JSON.parse(result.stdout).decision).toBe("block");
   });
 
-  it("allows recap when the tag is not the first line", () => {
+  it("blocks illegal recap tags and wait-prose", () => {
+    const ws = workspace();
+    const msgs = [
+      "[agent]: child done",
+      "[grunt done]",
+      "[implementer done]",
+      "[[agent] done]",
+      "waiting for grunt",
+      "wait grunt",
+    ];
+    msgs.forEach((msg, i) => {
+      const sid = `s-illegal-recap-${i}`;
+      const result = runHook(
+        {
+          hookEventName: "Stop",
+          reason: "end_turn",
+          lastAssistantMessage: msg,
+          workspaceRoot: ws,
+          sessionId: sid,
+        },
+        { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+      );
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).decision).toBe("block");
+    });
+  });
+
+  it("blocks recap when the tag is not the first line", () => {
     const ws = workspace();
     const result = runHook(
       {
@@ -234,7 +261,7 @@ describe("orchestrate-parent Stop", () => {
       },
     );
     expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
+    expect(JSON.parse(result.stdout).decision).toBe("block");
   });
 
   it("allows last_assistant_message snake_case recap", () => {
@@ -354,9 +381,79 @@ describe("orchestrate-parent Stop", () => {
       expect(json.reason).toMatch(/sim/);
       expect(json.reason).toMatch(/spawn implementer/);
       expect(json.reason).toMatch(/\[orchestrator\]:/);
+      expect(json.reason).not.toMatch(/do not recap done/);
+      expect(json.reason).toMatch(/do not recap; spawn/);
+      expect(json.reason).toMatch(/do not glue done into the tag/);
+      expect(json.reason).toMatch(/\[grunt done\]/);
+      expect(json.reason).toMatch(/\[\[agent\] done\]/);
+      expect(json.reason).not.toMatch(
+        /`\[grunt\]:`[\s\S]*`\[implementer\]:`[\s\S]*`\[thinker\]:`[\s\S]*`\[handoff\]:`/,
+      );
       reasons.push(json.reason);
     }
     expect(new Set(reasons).size).toBe(3);
+  });
+
+  it("Stop hook feedback does not unlink stop-block; normal prompt does", () => {
+    const ws = workspace();
+    const sid = "s-stop-fb";
+    const env = {
+      GROK_HOOK_EVENT: "stop",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: sid,
+    };
+    const payload = {
+      hookEventName: "Stop",
+      reason: "end_turn",
+      lastAssistantMessage: implMsg,
+      workspaceRoot: ws,
+      sessionId: sid,
+    };
+    const first = runHook(payload, env);
+    expect(first.status).toBe(0);
+    expect(JSON.parse(first.stdout).reason).toMatch(/^Violation:/);
+    const stopStamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `stop-block-${sid}`);
+    expect(fs.existsSync(stopStamp)).toBe(true);
+    const toolsUsed = path.join(ws, ORCHESTRATOR_LOGS_DIR, `tools-used-${sid}`);
+    fs.mkdirSync(path.dirname(toolsUsed), { recursive: true });
+    fs.writeFileSync(toolsUsed, "1");
+    const feedback = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "Stop hook feedback: spawn implementer",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(feedback.status).toBe(0);
+    expect(fs.existsSync(stopStamp)).toBe(true);
+    expect(fs.existsSync(toolsUsed)).toBe(false);
+    const second = runHook(payload, env);
+    expect(second.status).toBe(0);
+    expect(JSON.parse(second.stdout).reason).toMatch(/^Second violation:/);
+    const later = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "keep going",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(later.status).toBe(0);
+    expect(fs.existsSync(stopStamp)).toBe(false);
+    const again = runHook(payload, env);
+    expect(again.status).toBe(0);
+    expect(JSON.parse(again.stdout).reason).toMatch(/^Violation:/);
   });
 
   it("logs parent-stop telemetry without message body", () => {
