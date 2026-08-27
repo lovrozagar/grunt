@@ -1735,6 +1735,29 @@ describe("orchestrate-parent /solo", () => {
       expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
     }
   });
+
+  it("cascade skill ships to every host from one SSOT", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/cascade/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/Exit solo \/ restore cascade/);
+    expect(ssot).toMatch(/Not a sticky second mode/);
+    expect(ssot).toMatch(/grunt-off-\{sid\}/);
+    expect(ssot).toMatch(/\/solo/);
+    expect(ssot).toMatch(/`need:`\/`verdict:`/);
+    expect(ssot).toMatch(/Agents\/Antigravity/);
+    expect(ssot).toMatch(/instruction-only/);
+    expect(ssot).toMatch(/cannot unlink stamp/);
+    expect(ssot).not.toMatch(/multi-agent/);
+    for (const rel of [
+      ".grok/skills/cascade/SKILL.md",
+      ".claude/skills/cascade/SKILL.md",
+      ".agents/skills/cascade/SKILL.md",
+    ]) {
+      expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
+  });
 });
 
 describe("parent-deny product Write/Edit/Bash/Skill", () => {
