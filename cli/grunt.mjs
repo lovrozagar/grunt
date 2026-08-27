@@ -16,6 +16,9 @@ Commands:
   check      npm run rulesync:check
   help       Show this help
   version    Print package version
+
+Flags:
+  --skip-globals  Skip sync:globals:apply (auto-skipped when already initialized)
 `
 
 function pkgVersion() {
@@ -28,7 +31,9 @@ function npmRun(script) {
 }
 
 export function start() {
-  const [cmd] = process.argv.slice(2)
+  const args = process.argv.slice(2)
+  const skipGlobals = args.includes("--skip-globals")
+  const [cmd] = args.filter((a) => a !== "--skip-globals")
   if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     process.stdout.write(USAGE)
     return
@@ -38,7 +43,7 @@ export function start() {
     return
   }
   if (!cmd || cmd === "init") {
-    init(process.cwd())
+    init(process.cwd(), { skipGlobals })
     return
   }
   if (cmd === "generate") {

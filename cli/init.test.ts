@@ -415,11 +415,168 @@ describe("mergePackageJson", () => {
     mergePackageJson(dest, pkgRoot);
     const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
     expect(out.scripts.test).toBe("jest");
-    expect(out.scripts.alpha).toBe("a");
+    expect(out.scripts.alpha).toBe("old");
     expect(out.scripts.foo).toBe("bar");
     expect(out.devDependencies.lodash).toBe("4");
     expect(out.devDependencies["smol-toml"]).toBe("^1.8.0");
     expect(out.devDependencies.rulesync).toBe("latest");
+  });
+
+  it("preserves dest suffix after an upgraded grunt script prefix", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "rulesync generate -t bar" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-suffix-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: {
+          "rulesync:generate": "rulesync generate -t foo && node scripts/codex-sync.mjs",
+        },
+      }),
+    );
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe(
+      "rulesync generate -t bar && node scripts/codex-sync.mjs",
+    );
+  });
+
+  it("preserves suffix after a multi-command grunt script upgrade", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: {
+        "rulesync:generate": "rulesync generate -t bar && node scripts/emit.mjs",
+      },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-multi-suffix-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: {
+          "rulesync:generate":
+            "rulesync generate -t foo && node scripts/emit.mjs && node scripts/codex-sync.mjs",
+        },
+      }),
+    );
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe(
+      "rulesync generate -t bar && node scripts/emit.mjs && node scripts/codex-sync.mjs",
+    );
+  });
+
+  it("does not treat a non-owned prefix plus extra && as a grunt suffix", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { alpha: "a" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-nonowned-suffix-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({ scripts: { alpha: "echo custom && extra" } }),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts.alpha).toBe("echo custom && extra");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("falls through suffix scan when extra commands use bare semicolons", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "rulesync generate -t bar" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-semi-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: { "rulesync:generate": "echo custom;echo extra" },
+      }),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe("echo custom;echo extra");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("keeps dest when dest script already equals src", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "rulesync generate -t bar" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-equal-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({ scripts: { "rulesync:generate": "rulesync generate -t bar" } }),
+    );
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe("rulesync generate -t bar");
+  });
+
+  it("keeps dest when it already starts with the new src value plus suffix", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "rulesync generate -t bar" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-prefix-");
+    const cur = "rulesync generate -t bar && node scripts/codex-sync.mjs";
+    fs.writeFileSync(path.join(dest, "package.json"), JSON.stringify({ scripts: { "rulesync:generate": cur } }));
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe(cur);
+  });
+
+  it("keeps unrelated custom script values and dest-only keys, warns on skip", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("pj-unrelated-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: { alpha: "echo custom", foo: "bar", test: "jest" },
+      }),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts.alpha).toBe("echo custom");
+    expect(out.scripts.foo).toBe("bar");
+    expect(out.scripts.test).toBe("jest");
+    expect(out.scripts.zeta).toBe("z");
+    expect(warnSpy.mock.calls.some((c) => String(c[0]).includes("alpha") && String(c[0]).includes("untouched"))).toBe(
+      true,
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("replaces a grunt-owned script with no suffix", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "rulesync generate -t bar", "sync:globals:apply": "node scripts/sync-global-settings.mjs --apply" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-owned-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: { "rulesync:generate": "rulesync generate -t foo" },
+      }),
+    );
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe("rulesync generate -t bar");
   });
 
   it("early return when name is @lovrozagar/grunt", () => {
@@ -561,5 +718,86 @@ describe("init", () => {
       ["run", "sync:globals:apply"],
       ["run", "rulesync:check"],
     ]);
+  });
+
+  it("--skip-globals skips sync:globals:apply", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-skip-globals-");
+    const exec = vi.fn();
+    init(dest, { pkgRoot, execFileSync: exec, skipGlobals: true });
+    expect(exec.mock.calls.map((c) => [c[0], c[1]])).toEqual([
+      ["npm", ["install"]],
+      ["npm", ["run", "rulesync:generate"]],
+      ["npm", ["run", "rulesync:check"]],
+    ]);
+  });
+
+  it("auto-skip globals when telemetry.mjs exists", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-auto-tel-");
+    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
+    const exec = vi.fn();
+    init(dest, { pkgRoot, execFileSync: exec });
+    expect(exec.mock.calls.map((c) => c[1])).toEqual([
+      ["install"],
+      ["run", "rulesync:generate"],
+      ["run", "rulesync:check"],
+    ]);
+  });
+
+  it("auto-skip globals when AGENTS.md already has a grunt sentinel", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-auto-sent-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\n",
+    );
+    const exec = vi.fn();
+    init(dest, { pkgRoot, execFileSync: exec });
+    expect(exec.mock.calls.map((c) => c[1])).toEqual([
+      ["install"],
+      ["run", "rulesync:generate"],
+      ["run", "rulesync:check"],
+    ]);
+  });
+
+  it("re-run without sentinel does not create/overwrite *.grunt.md", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-rerun-nosent-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "hand-written consumer doc\n");
+    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
+    fs.writeFileSync(path.join(dest, "CLAUDE.grunt.md"), "stale side");
+    const exec = vi.fn();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    init(dest, { pkgRoot, execFileSync: exec });
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("hand-written consumer doc\n");
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe("hand-written consumer doc\n");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.grunt.md"), "utf8")).toBe("stale side");
+    expect(fs.existsSync(path.join(dest, "AGENTS.grunt.md"))).toBe(false);
+    expect(logSpy.mock.calls.filter((c) => String(c[0]).includes("lack markers"))).toHaveLength(1);
+    logSpy.mockRestore();
+  });
+
+  it("first init without sentinel still creates *.grunt.md", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-first-nosent-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "hand-written consumer doc\n");
+    const exec = vi.fn();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    init(dest, { pkgRoot, execFileSync: exec });
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("hand-written consumer doc\n");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.grunt.md"), "utf8")).toBe("CLAUDE.md content");
+    expect(fs.readFileSync(path.join(dest, "AGENTS.grunt.md"), "utf8")).toBe("AGENTS.md content");
+    expect(exec.mock.calls.map((c) => c[1])).toEqual([
+      ["install"],
+      ["run", "rulesync:generate"],
+      ["run", "sync:globals:apply"],
+      ["run", "rulesync:check"],
+    ]);
+    logSpy.mockRestore();
   });
 });

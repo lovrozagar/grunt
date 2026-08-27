@@ -13,7 +13,17 @@ npx @lovrozagar/grunt
 
 Same as `npx @lovrozagar/grunt init`. Merge SoT, `npm install`, `rulesync:generate`, `sync:globals:apply`, `rulesync:check`. Do not `npm test` as a consumer.
 
+`--skip-globals` skips `sync:globals:apply`. Re-init auto-skips globals when `<!-- grunt:begin -->` is in AGENTS.md/CLAUDE.md or `scripts/telemetry.mjs` exists. First init (no sentinel, no telemetry) still applies globals unless flagged.
+
 Contributors to this repo only: local `npm i && npm test`.
+
+# Version bump
+
+```
+npm i -D @lovrozagar/grunt@latest && npx @lovrozagar/grunt init
+```
+
+Owned trees/scripts refresh. Extra `.rulesync` files kept. Patches to grunt-owned files lost. Globals: first init applies; re-init auto-skips (or pass `--skip-globals`).
 
 # GOAL
 

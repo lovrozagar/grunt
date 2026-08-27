@@ -21,6 +21,9 @@ Commands:
   check      npm run rulesync:check
   help       Show this help
   version    Print package version
+
+Flags:
+  --skip-globals  Skip sync:globals:apply (auto-skipped when already initialized)
 `;
 
 const pkgRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -74,7 +77,7 @@ describe("start", () => {
     process.argv = ["node", "grunt"];
     start();
     expect(init).toHaveBeenCalledOnce();
-    expect(init).toHaveBeenCalledWith(process.cwd());
+    expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: false });
     expect(execFileSync).not.toHaveBeenCalled();
   });
 
@@ -82,7 +85,18 @@ describe("start", () => {
     process.argv = ["node", "grunt", "init"];
     start();
     expect(init).toHaveBeenCalledOnce();
-    expect(init).toHaveBeenCalledWith(process.cwd());
+    expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: false });
+  });
+
+  it.each([
+    ["node", "grunt", "--skip-globals"],
+    ["node", "grunt", "init", "--skip-globals"],
+    ["node", "grunt", "--skip-globals", "init"],
+  ])("passes skipGlobals when argv is %s", (...argv) => {
+    process.argv = argv;
+    start();
+    expect(init).toHaveBeenCalledOnce();
+    expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: true });
   });
 
   it("generate npm-runs rulesync:generate", () => {

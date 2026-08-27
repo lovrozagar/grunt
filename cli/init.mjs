@@ -58,7 +58,22 @@ export function mergeGitignore(dest) {
   fs.appendFileSync(gi, `${prefix}.tmp/\n`)
 }
 
-export function mergeGuardedMarkdown(dest, pkgRoot, file) {
+function destHasGruntSentinel(dest) {
+  return GUARDED_MD_FILES.some((file) => {
+    const p = path.join(dest, file)
+    return fs.existsSync(p) && fs.readFileSync(p, "utf8").includes(SENTINEL_BEGIN)
+  })
+}
+
+function destAlreadyInited(dest) {
+  return (
+    fs.existsSync(path.join(dest, "scripts", "telemetry.mjs")) ||
+    fs.existsSync(path.join(dest, ".grok", "hooks", "orchestrate-parent.js")) ||
+    fs.existsSync(path.join(dest, ".rulesync"))
+  )
+}
+
+export function mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited = false } = {}) {
   const src = path.join(pkgRoot, file)
   const d = path.join(dest, file)
   if (samePath(src, d)) return
@@ -73,6 +88,7 @@ export function mergeGuardedMarkdown(dest, pkgRoot, file) {
   const hasSentinel = [SENTINEL_BEGIN, SENTINEL_END].every((marker) => destText.includes(marker))
 
   if (!hasSentinel) {
+    if (alreadyInited) return "skipped-side-file"
     const gruntFile = file.replace(/\.md$/, ".grunt.md")
     fs.writeFileSync(path.join(dest, gruntFile), srcText)
     console.log(`${file} exists without grunt sentinel; wrote ${gruntFile} instead (original untouched)`)
@@ -139,6 +155,42 @@ export function mergeClaudeSettings(destRoot, pkgRoot) {
   fs.writeFileSync(destPath, `${JSON.stringify(destSettings, null, 2)}\n`)
 }
 
+function looksGruntOwnedPrefix(prefix) {
+  return /rulesync|sync:globals|^npm run /.test(prefix)
+}
+
+function commandCount(script) {
+  return script.split(/\s*(?:&&|;)\s*/).filter(Boolean).length
+}
+
+function extraOwnedSuffix(cur, newSrc) {
+  const nNew = commandCount(newSrc)
+  const nCur = commandCount(cur)
+  if (nCur <= nNew) return null
+  let completed = 1
+  const re = / &&| ;|&&/g
+  let m
+  while ((m = re.exec(cur))) {
+    if (completed === nNew) {
+      const prefix = cur.slice(0, m.index)
+      if (!looksGruntOwnedPrefix(prefix)) return null
+      return cur.slice(m.index)
+    }
+    completed++
+  }
+  return null
+}
+
+function mergeScriptValue(name, newSrc, cur) {
+  if (cur == null) return newSrc
+  if (cur.startsWith(newSrc)) return cur
+  const suffix = extraOwnedSuffix(cur, newSrc)
+  if (suffix != null) return newSrc + suffix
+  if (looksGruntOwnedPrefix(cur)) return newSrc
+  console.warn(`script \`${name}\` left untouched (unrelated customization)`)
+  return cur
+}
+
 export function mergePackageJson(dest, pkgRoot) {
   const destPath = path.join(dest, "package.json")
   let destPkg = {}
@@ -151,7 +203,7 @@ export function mergePackageJson(dest, pkgRoot) {
   destPkg.scripts = { ...(destPkg.scripts || {}) }
   for (const [k, v] of Object.entries(srcPkg.scripts || {})) {
     if (k === "test") continue
-    destPkg.scripts[k] = v
+    destPkg.scripts[k] = mergeScriptValue(k, v, destPkg.scripts[k])
   }
   destPkg.devDependencies = { ...(destPkg.devDependencies || {}) }
   destPkg.devDependencies["smol-toml"] = srcPkg.devDependencies["smol-toml"]
@@ -161,9 +213,12 @@ export function mergePackageJson(dest, pkgRoot) {
   fs.writeFileSync(destPath, `${JSON.stringify(destPkg, null, 2)}\n`)
 }
 
-export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileSync } = {}) {
+export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileSync, skipGlobals = false } = {}) {
   dest = path.resolve(dest)
   const pkgRoot = path.resolve(pkgRootOpt ?? PKG_ROOT)
+  const alreadyInited = destAlreadyInited(dest)
+  const skipGlobalsApply =
+    skipGlobals || destHasGruntSentinel(dest) || fs.existsSync(path.join(dest, "scripts", "telemetry.mjs"))
 
   for (const dir of COPY_DIRS) {
     const src = path.join(pkgRoot, dir)
@@ -182,8 +237,14 @@ export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileS
     }
   }
 
+  let skippedSideFile = false
   for (const file of GUARDED_MD_FILES) {
-    mergeGuardedMarkdown(dest, pkgRoot, file)
+    if (mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited }) === "skipped-side-file") {
+      skippedSideFile = true
+    }
+  }
+  if (skippedSideFile) {
+    console.log("AGENTS.md/CLAUDE.md lack markers and were left alone")
   }
 
   fs.mkdirSync(path.join(dest, "scripts"), { recursive: true })
@@ -207,6 +268,8 @@ export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileS
   mergePackageJson(dest, pkgRoot)
   exec("npm", ["install"], { cwd: dest, stdio: "inherit" })
   exec("npm", ["run", "rulesync:generate"], { cwd: dest, stdio: "inherit" })
-  exec("npm", ["run", "sync:globals:apply"], { cwd: dest, stdio: "inherit" })
+  if (!skipGlobalsApply) {
+    exec("npm", ["run", "sync:globals:apply"], { cwd: dest, stdio: "inherit" })
+  }
   exec("npm", ["run", "rulesync:check"], { cwd: dest, stdio: "inherit" })
 }
