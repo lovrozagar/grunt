@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const DEFAULT_GREP_HEAD_LIMIT = 50;
 /** Parent Read line limit when the model omits one. */
 export const DEFAULT_READ_LIMIT = 200;
-/** Implementer/thinker (and unknown non-grunt) Grep head_limit when omitted. */
+/** Implementer (and unknown non-grunt) Grep head_limit when omitted. */
 export const CHILD_GREP_HEAD_LIMIT = 150;
 /** Implementer/thinker (and unknown non-grunt) Read line limit when omitted. */
 export const CHILD_READ_LIMIT = 400;
@@ -37,6 +37,8 @@ export const REASON_HEAD_LIMIT =
 export const REASON_FILE_SIZE = "spawn grunt job:search; file >200KB";
 export const REASON_IMPLEMENTER_BASH =
   "need: grunt job:exec|test query:…";
+export const REASON_THINKER_TOOLS = "need: grunt job:search query:…";
+export const REASON_IMPLEMENTER_WRITE = "need: path not in spec/plan";
 
 const READ_TOOLS = new Set(["read", "readfile"]);
 const GREP_TOOLS = new Set(["grep", "grepsearch"]);
@@ -175,8 +177,8 @@ export function rewriteGruntScratchPath(filePath, workspaceRoot) {
 
 export function workspaceRootOf(data) {
   return (
-    process.env.GROK_WORKSPACE_ROOT ||
     (data && (data.workspaceRoot || data.workspace_root || data.cwd)) ||
+    process.env.GROK_WORKSPACE_ROOT ||
     process.cwd()
   );
 }
@@ -378,6 +380,110 @@ export function implementerBashReason(command, workspaceRoot) {
   return null;
 }
 
+function resolveWriteAbs(filePath, workspaceRoot) {
+  if (!filePath || typeof filePath !== "string") return null;
+  return path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(workspaceRoot, filePath);
+}
+
+function isUnderPlansDir(abs, workspaceRoot) {
+  if (!abs || !workspaceRoot) return false;
+  const dir = path.resolve(workspaceRoot, ".tmp", "plans");
+  if (abs === dir) return true;
+  const rel = path.relative(dir, abs);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function isUnsolicitedDocPath(abs) {
+  if (!abs) return false;
+  if (path.basename(abs) === "README.md") return true;
+  const segs = abs.replace(/\\/g, "/").split("/");
+  return segs.includes("docs") || segs.includes("examples");
+}
+
+function addPlanPath(set, raw, workspaceRoot) {
+  let s = String(raw || "").trim();
+  if (!s) return;
+  if (/^https?:\/\//i.test(s)) return;
+  s = s.replace(/[.,;:]+$/, "");
+  if (!s || /^https?:\/\//i.test(s)) return;
+  if (/^\/[A-Za-z][\w-]*$/.test(s)) return;
+  if (!s.includes("/") && !s.includes("\\") && !s.includes(".")) return;
+  const abs = resolveWriteAbs(s, workspaceRoot);
+  if (abs) set.add(abs);
+}
+
+function extractPlanPaths(text, workspaceRoot) {
+  const set = new Set();
+  const body = String(text || "");
+  for (const m of body.matchAll(/`([^`\n]+)`/g)) {
+    addPlanPath(set, m[1], workspaceRoot);
+  }
+  for (const m of body.matchAll(
+    /(^|[\s("'[=])(\/(?:[A-Za-z0-9._@+-]+\/)+[A-Za-z0-9._@+-]+)/g,
+  )) {
+    addPlanPath(set, m[2], workspaceRoot);
+  }
+  return set;
+}
+
+function inProgressStatus(text) {
+  const s = String(text || "");
+  if (!s.startsWith("---\n")) return false;
+  const end = s.indexOf("\n---\n", 4);
+  if (end === -1) return false;
+  return /^status:\s*in-progress\s*$/m.test(s.slice(4, end));
+}
+
+function loadInProgressPlans(workspaceRoot) {
+  const dir = path.resolve(workspaceRoot, ".tmp", "plans");
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    if (!name.endsWith(".md")) continue;
+    const abs = path.resolve(dir, name);
+    let text;
+    try {
+      text = fs.readFileSync(abs, "utf8");
+    } catch {
+      continue;
+    }
+    if (!inProgressStatus(text)) continue;
+    out.push({ abs, text });
+  }
+  return out;
+}
+
+function implementerWriteDeny(input, workspaceRoot) {
+  const ws = path.resolve(workspaceRoot);
+  const plans = loadInProgressPlans(ws);
+  const allow = new Set();
+  for (const p of plans) {
+    allow.add(p.abs);
+    for (const extracted of extractPlanPaths(p.text, ws)) {
+      allow.add(extracted);
+    }
+  }
+  const hasInProgress = plans.length > 0;
+  for (const key of WRITE_PATH_FIELDS) {
+    if (typeof input[key] !== "string" || !input[key]) continue;
+    const abs = resolveWriteAbs(input[key], ws);
+    if (!abs) continue;
+    if (isUnderPlansDir(abs, ws)) continue;
+    if (allow.has(abs)) continue;
+    if (isUnsolicitedDocPath(abs) || hasInProgress) {
+      return { type: "deny", reason: REASON_IMPLEMENTER_WRITE };
+    }
+  }
+  return null;
+}
+
 /**
  * @returns {null | { type: "deny", reason: string } | { type: "rewrite", updatedInput: object }}
  */
@@ -399,6 +505,10 @@ export function processFatTools(data) {
         changed = true;
       }
     }
+    if (subagentTypeOf(data) === "implementer") {
+      const denied = implementerWriteDeny(next, ws);
+      if (denied) return denied;
+    }
     return changed ? { type: "rewrite", updatedInput: next } : null;
   }
   const sub = subagentTypeOf(data);
@@ -409,6 +519,10 @@ export function processFatTools(data) {
   const isGrep = GREP_TOOLS.has(toolKey);
   const isGlob = GLOB_TOOLS.has(toolKey);
   const isBash = BASH_TOOLS.has(toolKey);
+
+  if (sub === "thinker" && (isGrep || isGlob || isBash)) {
+    return { type: "deny", reason: REASON_THINKER_TOOLS };
+  }
 
   if (isRead || isGrep || isGlob) {
     for (const v of collectPathValues(input)) {

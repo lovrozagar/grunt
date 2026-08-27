@@ -55,6 +55,7 @@ You are implementer subagent. Do not spawn.
 Read {abs}/.grok/skills/shared/plan-format.md and the plan at {abs_plan_path}.
 
 Implement remaining `[ ]` leaves in numeric order. Skip `[x]`.
+Write-allowlist = paths listed in this plan only. Do not add README/docs/examples unless listed in the plan. Missing path → blocker/`need:`; do not invent.
 After each leaf: flip that line to `[x]` in the plan file (only the box).
 When a phase's children are all `[x]`, mark the phase `[x]`.
 Frontmatter status: in-progress at start; done when all boxes `[x]`; blocked if you cannot finish.

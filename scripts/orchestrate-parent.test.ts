@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { isAllowedParentGruntJob } from "../.grok/hooks/orchestrate-parent.js";
+import {
+  STOP_REASONS,
+  isAllowedParentGruntJob,
+} from "../.grok/hooks/orchestrate-parent.js";
 import { VALID_HANDOFF } from "./persist-handoff.test.ts";
 import { VALID_THINKER } from "./persist-plan.test.ts";
 import { ORCHESTRATOR_LOGS_DIR, telemetryPath } from "./telemetry.mjs";
@@ -384,14 +387,52 @@ describe("orchestrate-parent Stop", () => {
       expect(json.reason).not.toMatch(/do not recap done/);
       expect(json.reason).toMatch(/do not recap; spawn/);
       expect(json.reason).toMatch(/do not glue done into the tag/);
-      expect(json.reason).toMatch(/\[grunt done\]/);
-      expect(json.reason).toMatch(/\[\[agent\] done\]/);
+      expect(json.reason).not.toMatch(/\[grunt done\]/);
+      expect(json.reason).not.toMatch(/\[\[agent\] done\]/);
+      expect(json.reason).not.toMatch(/Illegal:/);
       expect(json.reason).not.toMatch(
         /`\[grunt\]:`[\s\S]*`\[implementer\]:`[\s\S]*`\[thinker\]:`[\s\S]*`\[handoff\]:`/,
       );
       reasons.push(json.reason);
     }
     expect(new Set(reasons).size).toBe(3);
+  });
+
+  it("allows [orchestrator]: wait grunt", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[orchestrator]: wait grunt",
+        workspaceRoot: ws,
+        sessionId: "s-wait-grunt",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-wait-grunt",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("STOP_REASONS and parent SSOT omit Illegal anti-example strings", () => {
+    const files = [
+      path.join(root, ".rulesync/reference/cascade.md"),
+      path.join(root, ".rulesync/reference/hooks.md"),
+      path.join(root, ".rulesync/subagents/orchestrator.md"),
+      path.join(root, ".rulesync/rules/overview.md"),
+      path.join(root, ".rulesync/rules/CLAUDE.md"),
+    ];
+    const text = [
+      STOP_REASONS.join("\n"),
+      ...files.map((f) => fs.readFileSync(f, "utf8")),
+    ].join("\n");
+    expect(text).not.toMatch(/Illegal:/);
+    expect(text).not.toMatch(/\[grunt done\]/);
+    expect(text).not.toMatch(/\[\[agent\] done\]/);
   });
 
   it("Stop hook feedback does not unlink stop-block; normal prompt does", () => {

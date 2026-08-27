@@ -35,18 +35,15 @@ export const STOP_REASONS = [
   "Violation: Stop is not a recap-only wall. XOR one action now. DO NOT stop.\n" +
     "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
     "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
-    "Illegal: `[grunt done]` `[[agent] done]`.",
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
   "Second violation: still no exclusive next action. XOR one. DO NOT stop.\n" +
     "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
     "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
-    "Illegal: `[grunt done]` `[[agent] done]`.",
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
   "Third violation: last check before fail-open. XOR one action. DO NOT stop.\n" +
     "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
     "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.\n" +
-    "Illegal: `[grunt done]` `[[agent] done]`.",
+    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([

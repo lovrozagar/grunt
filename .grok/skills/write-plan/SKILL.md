@@ -39,6 +39,8 @@ Prompt:
 ```
 You are thinker subagent. Read-only. Do not write files. Do not spawn.
 
+Named-file Read of listed abs paths only; investigate/search/trees → `need:` (parent prefetch still allowed).
+
 Read {abs}/.grok/skills/shared/plan-format.md. Produce a plan that matches it.
 
 Task:

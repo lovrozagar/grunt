@@ -15,6 +15,8 @@ import {
   REASON_FILE_SIZE,
   REASON_HEAD_LIMIT,
   REASON_IMPLEMENTER_BASH,
+  REASON_IMPLEMENTER_WRITE,
+  REASON_THINKER_TOOLS,
   bashTargetsDenylist,
   denyResponse,
   hookResponse,
@@ -214,17 +216,45 @@ describe("processFatTools parent inject/deny", () => {
     ).toBeNull();
   });
 
-  it("injects 150/400 for thinker and unknown non-grunt subtypes", () => {
+  it("denies thinker Grep/Glob/Bash with REASON_THINKER_TOOLS", () => {
     expect(
       processFatTools({
         subagentType: "thinker",
         toolName: "grep",
         toolInput: { pattern: "foo" },
       }),
-    ).toEqual({
-      type: "rewrite",
-      updatedInput: { pattern: "foo", head_limit: CHILD_GREP_HEAD_LIMIT },
-    });
+    ).toEqual({ type: "deny", reason: REASON_THINKER_TOOLS });
+    expect(
+      processFatTools({
+        subagentType: "thinker",
+        toolName: "Glob",
+        toolInput: { glob_pattern: "**/*.ts" },
+      }),
+    ).toEqual({ type: "deny", reason: REASON_THINKER_TOOLS });
+    expect(
+      processFatTools({
+        subagentType: "thinker",
+        toolName: "list_dir",
+        toolInput: { target_directory: "src" },
+      }),
+    ).toEqual({ type: "deny", reason: REASON_THINKER_TOOLS });
+    expect(
+      processFatTools({
+        subagentType: "thinker",
+        toolName: "Bash",
+        toolInput: { command: "ls" },
+      }),
+    ).toEqual({ type: "deny", reason: REASON_THINKER_TOOLS });
+    expect(
+      processFatTools({
+        subagentType: "thinker",
+        toolName: "run_terminal_command",
+        toolInput: { command: "pwd" },
+      }),
+    ).toEqual({ type: "deny", reason: REASON_THINKER_TOOLS });
+  });
+
+  it("injects 400 for thinker Read; unknown sergeant Grep still 150", () => {
     const file = tmpFile(80, "thinker-small.txt");
     expect(
       processFatTools({
@@ -494,6 +524,109 @@ describe("rewriteGruntScratchPath", () => {
     ).toBeNull();
     expect(rewriteGruntScratchPath(path.join(ws, "src/index.ts"), ws)).toBeNull();
     expect(rewriteGruntScratchPath("src/index.ts", ws)).toBeNull();
+  });
+});
+
+describe("processFatTools implementer write-allowlist", () => {
+  function writePlan(ws: string, status: string, listed: string) {
+    const plans = path.join(ws, ".tmp", "plans");
+    fs.mkdirSync(plans, { recursive: true });
+    const planPath = path.join(plans, "1-listed-20260827T173530Z.md");
+    fs.writeFileSync(
+      planPath,
+      `---
+serial: 1
+name: listed
+status: ${status}
+created: 2026-08-27T17:35:30Z
+source: "test"
+---
+
+# listed
+
+Listed src: \`${listed}\`
+https://example.com/README.md
+`,
+    );
+    return planPath;
+  }
+
+  it("allows listed src and plan path; denies README/docs/examples/unlisted", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "gate-impl-write-"));
+    tmpDirs.push(ws);
+    const listed = path.join(ws, "src", "listed.ts");
+    const planPath = writePlan(ws, "in-progress", listed);
+    const deny = { type: "deny" as const, reason: REASON_IMPLEMENTER_WRITE };
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: listed, content: "ok" },
+      }),
+    ).toBeNull();
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Edit",
+        toolInput: { file_path: planPath, old_string: "a", new_string: "b" },
+      }),
+    ).toBeNull();
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "README.md"), content: "no" },
+      }),
+    ).toEqual(deny);
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "docs/x.md"), content: "no" },
+      }),
+    ).toEqual(deny);
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "examples/x.js"), content: "no" },
+      }),
+    ).toEqual(deny);
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "src/other.ts"), content: "no" },
+      }),
+    ).toEqual(deny);
+  });
+
+  it("with no in-progress plan denies README.md and allows unlisted src", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "gate-impl-nop-"));
+    tmpDirs.push(ws);
+    writePlan(ws, "ready", path.join(ws, "src", "listed.ts"));
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "README.md"), content: "no" },
+      }),
+    ).toEqual({ type: "deny", reason: REASON_IMPLEMENTER_WRITE });
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "src/other.ts"), content: "ok" },
+      }),
+    ).toBeNull();
   });
 });
 
