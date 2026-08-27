@@ -30,8 +30,9 @@ Classify `done` | `alive` | `stuck` vs prior peek: **done** (completed/failed), 
 Loop until done. No auto-kill. Kill only if the user asks and the host has a kill tool.
 Then print recap as `[agent]: …` with real child output. Do not redo the child's work.
 
-Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Allow only `[grunt|implementer|thinker]:` recap prefix, or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
-`/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/recap rules. Skills point here; do not paste this file.
+Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Allow only `[grunt|implementer|thinker|handoff]:` recap prefix, or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
+`/handoff` is the other in-parent turn: context large + work unfinished → parent writes one `.tmp/grunt/handoffs/` file from its own transcript (no child sees the session), recaps `[handoff]: serial=… path=…`, tells the user to continue in a new session. No spawn, one write, not a mode.
+`/solo` is the session mode (not one-turn): `beforeSubmitPrompt` writes `.tmp/orchestrator-logs/grunt-off-{sid}`, every gate short-circuits while it exists, `/cascade` unlinks it. Everything above resumes next turn. Antigravity: skill-only, no stamp create (see hooks.md). `/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/recap rules. Skills point here; do not paste this file.
 
 Host mapping (in-tree only; do not invent peek/kill APIs). GAP rows: no fake peeks, no auto-kill.
 

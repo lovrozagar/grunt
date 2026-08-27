@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { isAllowedParentGruntJob } from "../.grok/hooks/orchestrate-parent.js";
+import { VALID_HANDOFF } from "./persist-handoff.test.ts";
 import { VALID_THINKER } from "./persist-plan.test.ts";
 import { ORCHESTRATOR_LOGS_DIR, telemetryPath } from "./telemetry.mjs";
 
@@ -139,6 +140,39 @@ describe("orchestrate-parent Stop", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("allows a [handoff]: recap", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage:
+          "[handoff]: serial=1 path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md\nnext: start a new session; first action = read that path\n",
+        workspaceRoot: ws,
+        sessionId: "s-handoff",
+      },
+      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: "s-handoff" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("handoff skill ships to every host from one SSOT", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/handoff/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/\.tmp\/grunt\/handoffs\//);
+    expect(ssot).toMatch(/\[handoff\]: serial=/);
+    for (const rel of [
+      ".grok/skills/handoff/SKILL.md",
+      ".claude/skills/handoff/SKILL.md",
+      ".agents/skills/handoff/SKILL.md",
+    ]) {
+      expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
+  });
+
   it("parent skill documents one-turn escape", () => {
     const ssot = fs.readFileSync(
       path.join(root, ".rulesync/skills/parent/SKILL.md"),
@@ -209,6 +243,132 @@ describe("orchestrate-parent Stop", () => {
   });
 });
 
+describe("orchestrate-parent regression: defects 1-5", () => {
+  it("stampPath resolves via data.cwd when workspaceRoot/GROK_WORKSPACE_ROOT are absent (defect 1)", () => {
+    const ws = workspace();
+    const env: NodeJS.ProcessEnv = { GROK_HOOK_EVENT: "post_tool_use", GROK_SESSION_ID: "cwd-only" };
+    const result = runHook(
+      {
+        hookEventName: "PostToolUse",
+        cwd: ws,
+        sessionId: "cwd-only",
+      },
+      env,
+    );
+    expect(result.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "tools-used-cwd-only")),
+    ).toBe(true);
+  });
+
+  it("stop_hook_active short-circuits before any stamp write (defect 2)", () => {
+    const ws = workspace();
+    const env = {
+      GROK_HOOK_EVENT: "stop",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: "sha1",
+    };
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        stop_hook_active: true,
+        lastAssistantMessage: implMsg,
+        workspaceRoot: ws,
+        sessionId: "sha1",
+      },
+      env,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "stop-block-sha1")),
+    ).toBe(false);
+  });
+
+  it("recap matches with leading backtick, asterisk, blockquote, or leading blank line (defect 3)", () => {
+    const ws = workspace();
+    const variants = [
+      "`[implementer]: shipped",
+      "*[grunt]: done",
+      "> [thinker]: planned",
+      "\n\n[handoff]: serial=1 path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md",
+    ];
+    variants.forEach((msg, i) => {
+      const sid = `recap-variant-${i}`;
+      const result = runHook(
+        {
+          hookEventName: "Stop",
+          reason: "end_turn",
+          lastAssistantMessage: msg,
+          workspaceRoot: ws,
+          sessionId: sid,
+        },
+        { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
+    });
+  });
+
+  it("STOP_REASON differs across attempts 1/2/3 (defect 4)", () => {
+    const ws = workspace();
+    const env = {
+      GROK_HOOK_EVENT: "stop",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: "escalate",
+    };
+    const payload = {
+      hookEventName: "Stop",
+      reason: "end_turn",
+      lastAssistantMessage: implMsg,
+      workspaceRoot: ws,
+      sessionId: "escalate",
+    };
+    const reasons: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const result = runHook(payload, env);
+      expect(result.status).toBe(0);
+      const json = JSON.parse(result.stdout);
+      expect(json.decision).toBe("block");
+      expect(json.reason.length).toBeLessThan(600);
+      reasons.push(json.reason);
+    }
+    expect(new Set(reasons).size).toBe(3);
+  });
+
+  it("interceptNeed output contains the payload exactly once (defect 5)", () => {
+    const ws = workspace();
+    fs.writeFileSync(path.join(ws, "hit.txt"), "single-emit-token-abc\n");
+    const need =
+      'need: [{"job":"search","query":"single-emit-token-abc"}]';
+    const result = runHook(
+      {
+        hookEventName: "SubagentStop",
+        subagentType: "implementer",
+        lastAssistantMessage: need,
+        workspaceRoot: ws,
+        sessionId: "single-emit",
+      },
+      {
+        GROK_HOOK_EVENT: "subagent_stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "single-emit",
+      },
+    );
+    expect(result.status).toBe(0);
+    const json = JSON.parse(result.stdout);
+    expect(json.reason).toBeUndefined();
+    expect(json.hookSpecificOutput.additionalContext).toContain(
+      "single-emit-token-abc",
+    );
+    const occurrences = (
+      result.stdout.match(/single-emit-token-abc/g) || []
+    ).length;
+    expect(occurrences).toBe(1);
+  });
+});
+
 describe("orchestrate-parent parent write", () => {
   it("allows .tmp/plans/ write and rewrites serial path", () => {
     const ws = workspace();
@@ -245,6 +405,69 @@ describe("orchestrate-parent parent write", () => {
         toolInput: {
           file_path: path.join(ws, "src/index.ts"),
           content: "export {}\n",
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout).decision).toBe("deny");
+  });
+
+  it("allows .tmp/grunt/handoffs/ write and rewrites serial path", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/grunt/handoffs/draft.md"),
+          content: VALID_HANDOFF,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.hookSpecificOutput.updatedInput.file_path).toMatch(
+      new RegExp(
+        `${path
+          .join(ws, ".tmp/grunt/handoffs/1-sync-skills-to-hosts-")
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
+      ),
+    );
+    expect(out.hookSpecificOutput.updatedInput.content).toMatch(
+      /^---\nserial: 1\nname: sync-skills-to-hosts\nstatus: open\n/,
+    );
+    expect(out.decision).toBeUndefined();
+  });
+
+  it("denies invalid handoff under .tmp/grunt/handoffs/", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/grunt/handoffs/bad.md"),
+          content: "HANDOFF_NAME: bad\n\n# bad\n\nnope\n",
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout).decision).toBe("deny");
+  });
+
+  it("denies grunt scratch write outside handoffs", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/grunt/notes.md"),
+          content: VALID_HANDOFF,
         },
         workspaceRoot: ws,
       },
@@ -701,9 +924,74 @@ describe("orchestrate-parent telemetry", () => {
     expect(settings.permissions.deny).toContain("Agent(orchestrator)");
     const ssot = fs.readFileSync(path.join(root, ".rulesync/hooks.jsonc"), "utf8");
     expect(ssot).toMatch(/"stop"/);
-    expect(ssot).toMatch(/"userPromptSubmit"/);
+    expect(ssot).toMatch(/"beforeSubmitPrompt"/);
+    expect(ssot).not.toMatch(/"userPromptSubmit"/);
     expect(ssot).toMatch(/orchestrate-parent\.js/);
+    const jsonc = JSON.parse(
+      ssot.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""),
+    );
+    expect(Object.keys(jsonc.hooks)).toEqual(
+      expect.arrayContaining(["preToolUse", "beforeSubmitPrompt", "stop"]),
+    );
+    expect(Object.keys(jsonc.hooks)).not.toContain("userPromptSubmit");
+    expect(jsonc.hooks.beforeSubmitPrompt[0].command).toMatch(/orchestrate-parent\.js/);
+    expect(jsonc.hooks.beforeSubmitPrompt[0].timeout).toBe(5);
+    // SubagentStop must be registered on both the flagship Claude target and the
+    // hand-authored Grok SSOT, so the `need:` continuation advertised by
+    // .rulesync/reference/cascade.md and hooks.md actually exists on Claude.
+    expect(JSON.stringify(settings.hooks?.SubagentStop)).toMatch(
+      /orchestrate-parent\.js/,
+    );
+    const grokJson = JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".grok/hooks/orchestrate-parent.json"),
+        "utf8",
+      ),
+    );
+    expect(JSON.stringify(grokJson.hooks?.SubagentStop)).toMatch(
+      /orchestrate-parent\.js/,
+    );
   });
+
+  it("hooks generate --check loads canonical beforeSubmitPrompt", () => {
+    const result = spawnSync(
+      path.join(root, "node_modules/.bin/rulesync"),
+      ["generate", "-t", "claudecode,codexcli,antigravity-cli", "-f", "hooks", "--check"],
+      { cwd: root, encoding: "utf8", timeout: 60_000 },
+    );
+    const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    expect(combined).not.toMatch(/Failed to load Rulesync hooks file/);
+    expect(combined).not.toMatch(/unknown hook event name\(s\): userPromptSubmit/);
+    expect(result.status).toBe(0);
+    const claude = JSON.parse(
+      fs.readFileSync(path.join(root, ".claude/settings.json"), "utf8"),
+    ).hooks;
+    expect(JSON.stringify(claude.PreToolUse)).toMatch(/scrub-spawn-prompt/);
+    expect(JSON.stringify(claude.PreToolUse)).toMatch(/gate-fat-tools/);
+    expect(JSON.stringify(claude.UserPromptSubmit)).toMatch(/orchestrate-parent\.js/);
+    expect(JSON.stringify(claude.Stop ?? claude.stop)).toMatch(/orchestrate-parent\.js/);
+    const codex = JSON.parse(
+      fs.readFileSync(path.join(root, ".codex/hooks.json"), "utf8"),
+    ).hooks;
+    expect(JSON.stringify(codex.PreToolUse)).toMatch(/scrub-spawn-prompt/);
+    expect(JSON.stringify(codex.UserPromptSubmit)).toMatch(/orchestrate-parent\.js/);
+    expect(JSON.stringify(codex.Stop ?? codex.stop)).toMatch(/orchestrate-parent\.js/);
+    const ag = JSON.parse(
+      fs.readFileSync(path.join(root, ".agents/hooks.json"), "utf8"),
+    ).rulesync;
+    expect(JSON.stringify(ag.PreToolUse)).toMatch(/scrub-spawn-prompt/);
+    expect(JSON.stringify(ag.PreToolUse)).toMatch(/gate-fat-tools/);
+    expect(ag.UserPromptSubmit).toBeUndefined();
+    expect(ag.beforeSubmitPrompt).toBeUndefined();
+    expect(ag.userPromptSubmit).toBeUndefined();
+    expect(JSON.stringify(ag.Stop ?? ag.stop)).toMatch(/orchestrate-parent\.js/);
+    expect(fs.existsSync(path.join(root, ".grok/hooks/orchestrate-parent.js"))).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(root, ".grok/hooks/orchestrate-parent.json"))).toBe(
+      true,
+    );
+  }, 60_000);
 });
 
 describe("orchestrate-parent spawn Agent + default sid", () => {
@@ -745,3 +1033,199 @@ describe("orchestrate-parent spawn Agent + default sid", () => {
 });
 
 
+
+describe("orchestrate-parent /solo", () => {
+  const soloStamp = (ws: string, sid: string) =>
+    path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+
+  const submit = (ws: string, sid: string, prompt: string) =>
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt,
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+
+  const stopTurn = (ws: string, sid: string, msg = implMsg) =>
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: msg,
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+
+  const preTool = (
+    ws: string,
+    sid: string,
+    toolName: string,
+    toolInput: unknown,
+  ) =>
+    runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName,
+        toolInput,
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+
+  it("/solo sets the stamp and /cascade clears it", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    expect(fs.existsSync(soloStamp(ws, "s"))).toBe(true);
+    submit(ws, "s", "/cascade");
+    expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
+  });
+
+  it("/cascade is an idempotent no-op when already orchestrated", () => {
+    const ws = workspace();
+    const result = submit(ws, "s", "/cascade");
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
+  });
+
+  it("stamp is sticky across ordinary prompts", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    for (const p of ["what is 2+2", "/parent ship it", "/explain", "keep going"]) {
+      submit(ws, "s", p);
+      expect(fs.existsSync(soloStamp(ws, "s"))).toBe(true);
+    }
+  });
+
+  it("is session-scoped: one sid soloed leaves another orchestrated", () => {
+    const ws = workspace();
+    submit(ws, "a", "/solo");
+    expect(JSON.parse(stopTurn(ws, "b").stdout).decision).toBe("block");
+    expect(stopTurn(ws, "a").stdout).toBe("");
+  });
+
+  it("Stop does not block in solo", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    const result = stopTurn(ws, "s");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "stop-block-s")),
+    ).toBe(false);
+  });
+
+  it("solo never consumes the parent-escape stamp", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    const escape = path.join(ws, ORCHESTRATOR_LOGS_DIR, "parent-escape-s");
+    fs.mkdirSync(path.dirname(escape), { recursive: true });
+    fs.writeFileSync(escape, "1");
+    expect(stopTurn(ws, "s").stdout).toBe("");
+    expect(fs.existsSync(escape)).toBe(true);
+  });
+
+  it("allows parent Bash in solo", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    const out = JSON.parse(preTool(ws, "s", "bash", { command: "ls" }).stdout);
+    expect(out.decision).toBe("allow");
+  });
+
+  it("still applies the fat gate in solo", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    const out = JSON.parse(
+      preTool(ws, "s", "read", {
+        file_path: path.join(ws, "node_modules/a.js"),
+      }).stdout,
+    );
+    expect(out.hookSpecificOutput?.permissionDecision ?? out.decision).toBe(
+      "deny",
+    );
+  });
+
+  it("does not rewrite spawn to grunt in solo", () => {
+    const ws = workspace();
+    submit(ws, "s", "/solo");
+    const out = JSON.parse(
+      preTool(ws, "s", "task", { prompt: "do the thing" }).stdout,
+    );
+    expect(out.decision).toBe("allow");
+    expect(out.hookSpecificOutput).toBeUndefined();
+  });
+
+  it("refuses the stamp without a real session id", () => {
+    const ws = workspace();
+    runHook(
+      { hookEventName: "UserPromptSubmit", prompt: "/solo", workspaceRoot: ws },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "",
+      },
+    );
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "grunt-off-default")),
+    ).toBe(false);
+    expect(fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "grunt-off-"))).toBe(
+      false,
+    );
+  });
+
+  it("only exact /solo and /cascade toggle the mode", () => {
+    const ws = workspace();
+    for (const p of ["/solomon", "solo", "/solo now", "// solo", "/cascaded"]) {
+      submit(ws, "s", p);
+      expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
+    }
+  });
+
+  it("default path is unchanged without the stamp", () => {
+    const ws = workspace();
+    expect(JSON.parse(stopTurn(ws, "s").stdout).decision).toBe("block");
+    expect(
+      JSON.parse(preTool(ws, "s", "bash", { command: "ls" }).stdout).decision,
+    ).toBe("deny");
+    const spawn = JSON.parse(
+      preTool(ws, "s", "task", { prompt: "do the thing" }).stdout,
+    );
+    expect(spawn.hookSpecificOutput.updatedInput.subagent_type).toBe("grunt");
+  });
+
+  it("solo skill ships to every host from one SSOT", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/solo/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/grunt-off-\{sid\}/);
+    expect(ssot).toMatch(/\/cascade/);
+    expect(ssot).toMatch(/Agents\/Antigravity/);
+    expect(ssot).toMatch(/instruction-only/);
+    expect(ssot).toMatch(/cannot create stamp/);
+    for (const rel of [
+      ".grok/skills/solo/SKILL.md",
+      ".claude/skills/solo/SKILL.md",
+      ".agents/skills/solo/SKILL.md",
+    ]) {
+      expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
+  });
+});

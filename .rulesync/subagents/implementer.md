@@ -26,6 +26,8 @@ antigravity-cli:
   inheritMcp: false
   commandExecutionPolicy: eager
   tools: [view_file, grep_search, run_command, replace_file_content]
+geminicli:
+  model: gemini-2.5-pro
 ---
 Voice: `.rulesync/reference/output.md` — must follow.
 

@@ -29,6 +29,8 @@ antigravity-cli:
   inheritMcp: false
   commandExecutionPolicy: eager
   tools: [view_file, grep_search, run_command]
+geminicli:
+  model: gemini-2.5-flash
 ---
 Voice: `.rulesync/reference/output.md` — must follow.
 Protocol: `.rulesync/reference/cascade.md` (peek/kill table need:/resume). Do not paste. Do not open first.

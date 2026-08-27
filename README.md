@@ -17,7 +17,7 @@ Contributors to this repo only: local `npm i && npm test`.
 
 # GOAL
 
-- synced configs across all 4/5 major cli providers (grok build, claude code, codex, gemini cli, antigravity)! Emit matrix: grok/claude/codex/antigravity (`rulesync generate`). Gemini CLI is a tracked gap (not in generate).
+- synced configs across all 4/5 major cli providers (grok build, claude code, codex, gemini cli, antigravity)! Emit matrix: grok/claude/codex/antigravity (`rulesync generate`) then `emit-mcp-policy` + `emit-gemini` (`GEMINI.md`, `.gemini/agents/{id}/agent.md`; MCP `.gemini/settings.json`) + `emit-agent-shell-tools` (Claude grunt body `Bash`; other hosts `run_terminal_command`). No `-t geminicli`.
 - max situational speed relative to task intensity
 - max free token savings:
     maximally superterse without loosing value - sacrifice grammar for sake of concision
@@ -27,7 +27,7 @@ Contributors to this repo only: local `npm i && npm test`.
     context engineering
 - max reasoning and effort where needed and minimal reasoning and effort where not needed
 - agents:
-    - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[agent]:` echo. `/parent` one-turn only.
+    - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[agent]:` echo. `/parent` one-turn only; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md` and hands the session to a fresh one.
 - subagents:
     - grunt (low model, low effort) -> tools. facts/search/exec/git/web/test/low-reason mechanical write. never feature solution. never spawn.
     - implementer (medium model, medium effort) -> write already-defined solution. does not plan or invent design. never spawn.

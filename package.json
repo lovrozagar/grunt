@@ -1,7 +1,7 @@
 {
   "name": "@lovrozagar/grunt",
-  "version": "0.2.0",
-  "description": "Multi-agent orchestrator SoT — deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
+  "version": "0.3.0",
+  "description": "Multi-agent orchestrator SoT \u2014 deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
   "keywords": [
     "agents",
     "grunt",
@@ -25,10 +25,14 @@
     "bin/grunt.js",
     "cli",
     "scripts/check-globals.mjs",
+    "scripts/emit-agent-shell-tools.mjs",
+    "scripts/emit-gemini.mjs",
     "scripts/emit-mcp-policy.mjs",
     "scripts/gate-fat-tools.mjs",
+    "scripts/hooks-union.mjs",
     "scripts/grunt-job.mjs",
     "scripts/parse-need.mjs",
+    "scripts/persist-handoff.mjs",
     "scripts/persist-plan.mjs",
     "scripts/purge-global-mcps.mjs",
     "scripts/scrub-spawn-prompt.mjs",
@@ -52,9 +56,11 @@
     "access": "public"
   },
   "scripts": {
-    "rulesync:generate": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs",
-    "rulesync:watch": "node scripts/emit-mcp-policy.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents --watch",
-    "rulesync:check": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents --check && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks --check && node scripts/emit-mcp-policy.mjs --check && node scripts/check-globals.mjs",
+    "rulesync:generate": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && node scripts/hooks-union.mjs",
+    "rulesync:watch": "node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills --watch",
+    "rulesync:check": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,skills --check && rulesync generate -t codexcli,antigravity-cli,grokcli -f subagents --check && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks --check && node scripts/emit-mcp-policy.mjs --check && node scripts/emit-gemini.mjs --check && node scripts/emit-agent-shell-tools.mjs --check && node scripts/check-globals.mjs && node scripts/hooks-union.mjs --check",
+    "hooks:union": "node scripts/hooks-union.mjs",
+    "hooks:check": "node scripts/hooks-union.mjs --check",
     "rulesync:doctor": "rulesync doctor",
     "sync:globals": "node scripts/sync-global-settings.mjs",
     "sync:globals:check": "node scripts/check-globals.mjs",
@@ -66,7 +72,7 @@
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@vitest/coverage-v8": "^3.2.7",
-    "rulesync": "latest",
+    "rulesync": "16.17.0",
     "smol-toml": "^1.8.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-/** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan writes.
+/** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan/persistHandoff writes.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
-Stop: [agent]: recap | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
+Stop: [agent]:/[handoff]: recap | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
 Fail-open: parse/crash → empty stdout, exit 0. Explicit JSON only when denying.
 */
 import fs from "node:fs";
@@ -18,13 +18,32 @@ import {
   subagentTypeOf,
 } from "../../scripts/gate-fat-tools.mjs";
 import { persistPlan } from "../../scripts/persist-plan.mjs";
+import { persistHandoff } from "../../scripts/persist-handoff.mjs";
 import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
 import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs";
 
 const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
-const STOP_REASON =
-  "parent is orchestrator; spawn grunt|implementer|thinker; do not complete in-parent";
+const STOP_REASONS = [
+  "Violation: parent replied without a [agent]: recap or /parent escape.\n" +
+    "DO NOT stop. Continue IN THIS RESPONSE:\n" +
+    "1. Spawn grunt|implementer|thinker for the pending work.\n" +
+    "2. Reply with the `[agent]:` recap only.\n" +
+    "If every spawned child already returned and the turn is done, reply with the `[agent]:` recap now.\n" +
+    "If context is long, use /handoff.",
+  "Second violation: still no [agent]: recap.\n" +
+    "DO NOT stop. Right now, in this same response:\n" +
+    "1. Spawn grunt|implementer|thinker.\n" +
+    "2. Then reply with only the `[agent]:` recap line.\n" +
+    "Already done and every child returned? Send the `[agent]:` recap immediately.\n" +
+    "Context too long? Use /handoff.",
+  "Third violation: recap still missing.\n" +
+    "This is the last check before fail-open. DO NOT stop:\n" +
+    "1. Spawn the correct agent for the remaining work.\n" +
+    "2. Reply with `[agent]:` recap only, nothing else.\n" +
+    "Complete with all children returned? Send the recap now.\n" +
+    "Long context? Use /handoff.",
+];
 const PARENT_TOOLS = new Set([
   "todowrite",
   "getcommandorsubagentoutput",
@@ -43,6 +62,10 @@ const READ_TOOLS = new Set(["readfile", "read"]);
 const INTERCEPT_JOBS = new Set(["search", "exec"]);
 const MAX_STOP = 3;
 const MAX_INTERCEPT = 3;
+/** `/solo` enters single-agent mode; `/cascade` restores the orchestrator. */
+const SOLO_RE = /^\s*\/solo\s*$/;
+const CASCADE_RE = /^\s*\/cascade\s*$/;
+const SOLO_STAMP = "grunt-off";
 
 
 function main() {
@@ -76,6 +99,13 @@ function preToolUse(data) {
     const code = emitFat(data);
     return code == null ? 0 : code;
   }
+  if (isSoloMode(data)) {
+    // Single-agent session: no parent-deny, no spawn rewrite. Fat gate still applies.
+    const fatCode = emitFat(data);
+    if (fatCode !== null) return fatCode;
+    emit({ decision: "allow" });
+    return 0;
+  }
   if (SPAWN_TOOLS.has(toolKey)) {
     const updated = rewriteSpawn(toolInput);
     if (updated) {
@@ -105,6 +135,16 @@ function preToolUse(data) {
   }
   emit({ decision: "deny", reason: DENY_REASON });
   return 0;
+}
+
+/** Session flag, not one-turn. Fail-closed: an unreadable stamp keeps grunt on. */
+export function isSoloMode(data) {
+  try {
+    const p = soloStampPath(data);
+    return Boolean(p && fs.existsSync(p));
+  } catch {
+    return false;
+  }
 }
 
 function hasParentEscape(data) {
@@ -146,19 +186,30 @@ function emitFat(data) {
 function workspaceRootOf(data) {
   return (
     process.env.GROK_WORKSPACE_ROOT ||
-    (data && (data.workspaceRoot || data.workspace_root || data.cwd)) ||
+    (data && (data.workspaceRoot || data.workspace_root)) ||
+    (data && data.cwd) ||
+    process.env.CLAUDE_PROJECT_DIR ||
+    process.cwd() ||
     ""
   );
 }
 
-export function isUnderPlans(filePath, workspaceRoot) {
+function isUnderDir(filePath, workspaceRoot, segments) {
   if (!filePath || !workspaceRoot) return false;
   const abs = path.isAbsolute(filePath)
     ? path.resolve(filePath)
     : path.resolve(workspaceRoot, filePath);
-  const plans = path.resolve(workspaceRoot, ".tmp", "plans");
-  const rel = path.relative(plans, abs);
+  const dir = path.resolve(workspaceRoot, ...segments);
+  const rel = path.relative(dir, abs);
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+export function isUnderPlans(filePath, workspaceRoot) {
+  return isUnderDir(filePath, workspaceRoot, [".tmp", "plans"]);
+}
+
+export function isUnderHandoffs(filePath, workspaceRoot) {
+  return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "handoffs"]);
 }
 
 export function isAllowedParentGruntJob(command, workspaceRoot) {
@@ -177,16 +228,18 @@ function parentWrite(data, toolInput) {
     toolInput.path ||
     toolInput.target_file ||
     "";
-  if (!isUnderPlans(rawPath, ws)) {
+  const handoff = isUnderHandoffs(rawPath, ws);
+  if (!handoff && !isUnderPlans(rawPath, ws)) {
     emit({ decision: "deny", reason: DENY_REASON });
     return 0;
   }
   const content = typeof toolInput.content === "string" ? toolInput.content : "";
-  const result = persistPlan({ workspaceRoot: ws, content });
+  const persist = handoff ? persistHandoff : persistPlan;
+  const result = persist({ workspaceRoot: ws, content });
   if (!result.ok) {
     emit({
       decision: "deny",
-      reason: result.error || "invalid plan",
+      reason: result.error || (handoff ? "invalid handoff" : "invalid plan"),
     });
     return 0;
   }
@@ -229,7 +282,18 @@ function isParentEscapePrompt(prompt) {
 function userPromptSubmit(data) {
   unlinkQuiet(stampPath(data, "tools-used"));
   unlinkQuiet(stampPath(data, "stop-block"));
-  if (isParentEscapePrompt(userPromptOf(data))) {
+  const prompt = userPromptOf(data);
+  // Sticky: only /solo and /cascade move it. Every other prompt leaves it alone.
+  if (SOLO_RE.test(prompt)) {
+    const solo = soloStampPath(data);
+    if (solo) {
+      fs.mkdirSync(path.dirname(solo), { recursive: true });
+      fs.writeFileSync(solo, "1");
+    }
+  } else if (CASCADE_RE.test(prompt)) {
+    unlinkQuiet(soloStampPath(data));
+  }
+  if (isParentEscapePrompt(prompt)) {
     const p = stampPath(data, "parent-escape");
     if (p) {
       fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -242,15 +306,28 @@ function userPromptSubmit(data) {
 }
 
 function isChildRecap(msg) {
-  return /^\s*\[(?:grunt|implementer|thinker)\]:/.test(String(msg || ""));
+  const lines = String(msg || "").split("\n");
+  let firstNonEmpty = "";
+  for (const line of lines) {
+    if (line.trim() !== "") {
+      firstNonEmpty = line;
+      break;
+    }
+  }
+  const stripped = firstNonEmpty.replace(/^[\s`*_>]+/, "");
+  return /^\[(?:grunt|implementer|thinker|handoff)\]:/.test(stripped);
 }
 
 function stop(data) {
   if (data.subagentType || data.subagent_type) {
     return interceptNeed(data, "Stop");
   }
+  if (data.stopHookActive || data.stop_hook_active) return 0;
   const reason = String(data.reason || "");
   if (reason && reason !== "end_turn") return 0;
+
+  // Before the parent-escape consume: solo must never burn the one-turn stamp.
+  if (isSoloMode(data)) return 0;
 
   const escapeStamp = stampPath(data, "parent-escape");
   if (escapeStamp && fs.existsSync(escapeStamp)) {
@@ -272,7 +349,8 @@ function stop(data) {
     fs.mkdirSync(path.dirname(stopStamp), { recursive: true });
     fs.writeFileSync(stopStamp, String(n + 1));
   }
-  emit({ decision: "block", reason: STOP_REASON });
+  const reasonText = STOP_REASONS[Math.min(n, STOP_REASONS.length - 1)];
+  emit({ decision: "block", reason: reasonText });
   return 0;
 }
 
@@ -368,7 +446,6 @@ function interceptNeed(data, hookEventName) {
   );
   emit({
     decision: "block",
-    reason,
     hookSpecificOutput: {
       hookEventName,
       additionalContext: reason,
@@ -379,12 +456,25 @@ function interceptNeed(data, hookEventName) {
 
 function stampPath(data, prefix) {
   const root = workspaceRootOf(data);
-  const sid =
-    process.env.GROK_SESSION_ID ||
-    (data && (data.sessionId || data.session_id)) ||
-    "default";
+  const sid = sessionIdOf(data) || "default";
   if (!root) return null;
   return path.join(root, ORCHESTRATOR_LOGS_DIR, prefix + "-" + sid);
+}
+
+function sessionIdOf(data) {
+  return String(
+    process.env.GROK_SESSION_ID ||
+      (data && (data.sessionId || data.session_id)) ||
+      "",
+  );
+}
+
+/** Solo is a mode: never share a `default` stamp across sid-less sessions. */
+function soloStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, ORCHESTRATOR_LOGS_DIR, SOLO_STAMP + "-" + sid);
 }
 
 function unlinkQuiet(p) {

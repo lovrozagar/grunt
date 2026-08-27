@@ -21,6 +21,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.grok/hooks/orchestrate-parent.js\"",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
