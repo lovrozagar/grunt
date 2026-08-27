@@ -84,10 +84,49 @@ jobs:
           fi
           npm publish --access public
 
+  github-packages:
+    name: GitHub Packages
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://npm.pkg.github.com
+          scope: "@lovrozagar"
+          cache: npm
+      - run: npm ci
+      - name: Check tag matches package.json
+        run: |
+          ref="${{ inputs.tag || github.ref_name }}"
+          tag="${ref#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+      - name: Publish to npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ref="${{ inputs.tag || github.ref_name }}"
+          tag="${ref#v}"
+          if npm view "@lovrozagar/grunt@$tag" --registry=https://npm.pkg.github.com version >/dev/null 2>&1; then
+            echo "GitHub Packages already has @lovrozagar/grunt@$tag — skipping"
+            exit 0
+          fi
+          npm publish --access public
+
   github-release:
     name: GitHub Release
-    needs: npmjs
-    if: ${{ !cancelled() && needs.npmjs.result == 'success' }}
+    needs: [npmjs, github-packages]
+    if: ${{ !cancelled() && needs.npmjs.result == 'success' && needs.github-packages.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
