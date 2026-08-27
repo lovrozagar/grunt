@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   AUTORUN_NEEDLES,
   GRUNT_NEEDLES,
-  PLATFORM_DENY,
   POST_WRITE_MATCHER,
   applyUnion,
   checkUnion,
@@ -35,6 +34,8 @@ const SCRUB = "scrub-spawn-prompt.mjs";
 const GATE = "gate-fat-tools.mjs";
 const PARENT = "orchestrate-parent.js";
 const MCP_DENY = "mcp__*";
+const EDIT_PLATFORM = "Edit(platform/**)";
+const WRITE_PLATFORM = "Write(platform/**)";
 
 const gruntPre = [
   {
@@ -148,7 +149,6 @@ function touchConsumerScripts(ws: string) {
   for (const n of AUTORUN_NEEDLES) {
     fs.writeFileSync(path.join(ws, "scripts", n), "");
   }
-  fs.mkdirSync(path.join(ws, "platform"), { recursive: true });
 }
 
 describe("parseArgv", () => {
@@ -178,7 +178,8 @@ describe("grunt keep-list (no consumer overlay)", () => {
     expect(JSON.stringify(next.hooks.UserPromptSubmit)).toMatch(PARENT);
     expect(JSON.stringify(next.hooks.Stop)).toMatch(PARENT);
     expect(next.permissions.deny).toContain(MCP_DENY);
-    expect(next.permissions.deny).not.toEqual(expect.arrayContaining(PLATFORM_DENY));
+    expect(next.permissions.deny).not.toContain(EDIT_PLATFORM);
+    expect(next.permissions.deny).not.toContain(WRITE_PLATFORM);
     expect(next.hooks.SessionStart).toBeUndefined();
     expect(checkUnion({ workspaceRoot: ws })).toEqual([]);
   });
@@ -211,15 +212,33 @@ describe("grunt keep-list (no consumer overlay)", () => {
     expect(applyUnion({ workspaceRoot: ws, check: true }).ok).toBe(false);
     expect(fs.readFileSync(claudePath, "utf8")).toContain('"PreToolUse": []');
   });
+
+  it("platform/ dir without permissions.json emits no path deny", () => {
+    const ws = tmpDir("union-plat-");
+    seedGruntDrivers(ws);
+    fs.mkdirSync(path.join(ws, "platform"), { recursive: true });
+    const claude = readJson(ws, ".claude/settings.json");
+    claude.permissions.deny = [...claude.permissions.deny, WRITE_PLATFORM];
+    writeJson(ws, ".claude/settings.json", claude);
+    expect(applyUnion({ workspaceRoot: ws }).ok).toBe(true);
+    const deny = readJson(ws, ".claude/settings.json").permissions.deny;
+    expect(deny).toContain(MCP_DENY);
+    expect(deny).not.toContain(EDIT_PLATFORM);
+    expect(deny).not.toContain(WRITE_PLATFORM);
+    expect(deny.some((x: string) => String(x).startsWith("Write("))).toBe(false);
+    expect(checkUnion({ workspaceRoot: ws })).toEqual([]);
+  });
 });
 
 describe("consumer overlay keep-list re-apply", () => {
-  it("puts SessionStart / check-behind / validate+sim / platform deny back with grunt scrub/gate", () => {
+  it("puts SessionStart / check-behind / validate+sim / overlay Edit deny back with grunt scrub/gate", () => {
     const ws = tmpDir("union-consumer-");
     seedGruntDrivers(ws);
     touchConsumerScripts(ws);
+    writeJson(ws, ".rulesync/permissions.json", { deny: [EDIT_PLATFORM] });
     const claude = readJson(ws, ".claude/settings.json");
     claude.hooks = { UserPromptSubmit: claude.hooks.UserPromptSubmit };
+    claude.permissions.deny = [...claude.permissions.deny, WRITE_PLATFORM];
     writeJson(ws, ".claude/settings.json", claude);
     writeJson(ws, ".codex/hooks.json", { hooks: {} });
     writeJson(ws, ".agents/hooks.json", { rulesync: {} });
@@ -230,11 +249,16 @@ describe("consumer overlay keep-list re-apply", () => {
 
     const next = readJson(ws, ".claude/settings.json");
     const text = JSON.stringify(next);
-    for (const n of [...AUTORUN_NEEDLES, ...GRUNT_NEEDLES, ...PLATFORM_DENY]) {
+    for (const n of [...AUTORUN_NEEDLES, ...GRUNT_NEEDLES]) {
       expect(text).toContain(n);
     }
     expect(JSON.stringify(next.hooks.UserPromptSubmit)).toMatch(PARENT);
     expect(next.permissions.deny).toContain(MCP_DENY);
+    expect(next.permissions.deny).toContain(EDIT_PLATFORM);
+    expect(next.permissions.deny).not.toContain(WRITE_PLATFORM);
+    expect(next.permissions.deny.some((x: string) => String(x).startsWith("Write("))).toBe(
+      false,
+    );
     expect(next.hooks.SessionStart).toBeTruthy();
     expect(JSON.stringify(next.hooks.PreToolUse)).toMatch(/check-behind/);
     expect(JSON.stringify(next.hooks.PostToolUse)).toMatch(/validate\.mjs/);
@@ -258,6 +282,8 @@ describe("consumer overlay keep-list re-apply", () => {
     expect(JSON.stringify(gemini.hooks)).not.toMatch(/check-behind/);
     expect(gemini._caveat_check_behind).toBeTruthy();
     expect(gemini._caveat_permissions).toBeTruthy();
+    expect(String(gemini._caveat_permissions)).not.toMatch(/platform/);
+    expect(String(gemini._caveat_permissions)).not.toMatch(/Write\(/);
 
     const ssot = fs.readFileSync(path.join(ws, ".rulesync/hooks.jsonc"), "utf8");
     expect(ssot).toMatch(/"beforeSubmitPrompt"/);
@@ -267,6 +293,7 @@ describe("consumer overlay keep-list re-apply", () => {
     const ws = tmpDir("union-idemp-");
     seedGruntDrivers(ws);
     touchConsumerScripts(ws);
+    writeJson(ws, ".rulesync/permissions.json", { deny: [EDIT_PLATFORM] });
     applyUnion({ workspaceRoot: ws });
     const first = fs.readFileSync(path.join(ws, ".claude/settings.json"), "utf8");
     applyUnion({ workspaceRoot: ws });
@@ -274,6 +301,7 @@ describe("consumer overlay keep-list re-apply", () => {
     expect(second).toBe(first);
     const deny = readJson(ws, ".claude/settings.json").permissions.deny;
     expect(deny.filter((x: string) => x === MCP_DENY)).toEqual([MCP_DENY]);
+    expect(deny.filter((x: string) => x === EDIT_PLATFORM)).toEqual([EDIT_PLATFORM]);
   });
 });
 

@@ -8,8 +8,8 @@
  * Grok SessionStart stays empty on orchestrate-parent.json.
  *
  * Consumer extras (if those scripts exist): SessionStart, check-behind,
- * validate+sim, platform/** deny. Gemini: SessionStart + AfterTool only;
- * check-behind / path deny stay caveats.
+ * validate+sim. Path deny from consumer `.rulesync/permissions.json`.
+ * Gemini: SessionStart + AfterTool only; check-behind / path deny stay caveats.
  *
  *   node scripts/hooks-union.mjs           apply then check
  *   node scripts/hooks-union.mjs --check   keep-list only
@@ -40,7 +40,6 @@ export const AUTORUN_NEEDLES = [
   "sim.mjs",
 ];
 export const GRUNT_NEEDLES = ["scrub-spawn-prompt.mjs", "gate-fat-tools.mjs"];
-export const PLATFORM_DENY = ["Write(platform/**)", "Edit(platform/**)"];
 export const GIT_HOOKS = [
   "scripts/git-hooks/pre-commit",
   "scripts/git-hooks/pre-commit.mjs",
@@ -52,7 +51,7 @@ export const POST_WRITE_MATCHER = "Write|Edit|write|search_replace";
 const CAVEAT_BEHIND =
   "NOT ported: PreToolUse check-behind.mjs. Gemini has no confirmed before-tool deny event.";
 const CAVEAT_PERMS =
-  "NOT ported: Write/Edit(platform/**). Gemini tool controls are name-scoped, not path-scoped.";
+  "path-scoped permissions.deny not ported; Gemini is name-scoped";
 
 export function parseArgv(argv) {
   const args = Array.isArray(argv) ? argv : [];
@@ -83,8 +82,13 @@ function hasScript(root, name) {
   return fs.existsSync(path.join(root, "scripts", name));
 }
 
-function hasPlatform(root) {
-  return fs.existsSync(path.join(root, "platform"));
+function withoutWritePath(arr) {
+  return arr.filter((x) => typeof x === "string" && !x.startsWith("Write("));
+}
+
+function loadConsumerDeny(root) {
+  const data = loadJson(path.join(root, ".rulesync/permissions.json"));
+  return Array.isArray(data.deny) ? withoutWritePath(data.deny) : [];
 }
 
 function presentAutorun(root) {
@@ -229,8 +233,11 @@ function applyClaude(root) {
   const post = desiredPost(root);
   if (post) hooks.PostToolUse = upsertGroups(hooks.PostToolUse, post);
   const permissions = isPlainObject(live.permissions) ? { ...live.permissions } : {};
-  const deny = Array.isArray(permissions.deny) ? [...permissions.deny] : [];
-  permissions.deny = hasPlatform(root) ? uniq([...deny, ...PLATFORM_DENY]) : deny;
+  const liveDeny = Array.isArray(permissions.deny) ? permissions.deny : [];
+  permissions.deny = uniq([
+    ...liveDeny.filter((x) => typeof x !== "string" || !x.startsWith("Write(")),
+    ...loadConsumerDeny(root),
+  ]);
   const next = { ...live, permissions, hooks };
   saveJson(abs, next);
 }
@@ -313,11 +320,7 @@ export function checkUnion(opts = {}) {
     {
       id: "claude",
       path: ".claude/settings.json",
-      needles: [
-        ...GRUNT_NEEDLES,
-        ...autorun,
-        ...(hasPlatform(root) ? PLATFORM_DENY : []),
-      ],
+      needles: [...GRUNT_NEEDLES, ...autorun, ...loadConsumerDeny(root)],
     },
     {
       id: "codex",
