@@ -10,9 +10,9 @@ Shipped protocol: **parent-only spawn**. Only the parent **orchestrator** sessio
 
 Always spawn + prompt. First token = spawn. No try-then-spawn. No parent probe. No tiny-read/grep/list_dir/bash/grunt-job for the user. No skip-spawn. `/parent` is the only parent-tool escape.
 
-1. Facts / search / exec / git / web / test / low-reason write → grunt.
-2. Mid-reason / feature / unsure → implementer.
-3. Design / architecture / hard debug → thinker.
+1. Tools (facts / search / exec / git / web / test / low-reason mechanical write) → grunt.
+2. Write defined solution → implementer.
+3. Plan / deep reason (edge cases / pitfalls) → thinker.
 4. Fresh/world facts → grunt `job: web`. Never answer from memory.
 
 Spawn only `grunt` | `implementer` | `thinker`. Omit `model`. Isolation `none` unless asked.
@@ -24,7 +24,7 @@ Long parent sessions rely on two-pass compaction; prefer a new parent session pe
 ## Wait / peek
 
 Parent-only. Non-blocking spawn so each child has a host id immediately. Per-child, not one global timer.
-Every ≤60s peek is real host status (no `sleep` then guess). First return ≤60s is the peek (earlier if the child finishes).
+Every 60s peek is real host status (no `sleep` then guess). `timeout_ms=60000` every peek.
 Quote host fields only (`status`, elapsed since spawn, last activity/output snippet) or quote the error. Never invent.
 Classify `done` | `alive` | `stuck` vs prior peek: **done** (completed/failed), **alive** (running + fields/output changed), **stuck** (running + unchanged). Unchanged snippet = stuck, not “still working”.
 Loop until done. No auto-kill. Kill only if the user asks and the host has a kill tool.

@@ -29,17 +29,17 @@ Contributors to this repo only: local `npm i && npm test`.
 - agents:
     - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[agent]:` echo. `/parent` one-turn only.
 - subagents:
-    - grunt (low model, low effort) -> spawned for gruntwork where speed important but reasoning not - local or web search, monitor, poll, cron, file system operations, low-reason writes (mechanical/repetitive/obvious; volume OK), dependency management and operations, test running (run & respond superterse, instructions for raw text, rtk compression for tool calls)
-    - implementor (medium model, medium effort) -> spawned for mid-reason work: feature logic, API design, non-obvious refactors, edge cases, architecture-aware code
-    - thinker (high model, high effort) -> spawned for planning, reasoning, advising, weighting pros & cons, comparing alternatives. never mutates disk data only outputs instructions
+    - grunt (low model, low effort) -> tools. facts/search/exec/git/web/test/low-reason mechanical write. never feature solution. never spawn.
+    - implementer (medium model, medium effort) -> write already-defined solution. does not plan or invent design. never spawn.
+    - thinker (high model, high effort) -> plan/deep reason. flags edge cases/pitfalls. read-only. never spawn. no bash.
 
 # Examples
 
 1. User - "Create me a react weather app"
     Orchestrator spawns and prompts thinker
-    Tinker outputs plan to Orchestrator
-    Orchestrator spawns and prompts implementor
-    Implementor writes to disk, implements the app & outputs to orchestrator
+    Thinker outputs plan to Orchestrator
+    Orchestrator spawns and prompts implementer
+    Implementer writes to disk, implements the app & outputs to orchestrator
     Orchestrator outputs to user
 
 2. User - "What is 2+2"
