@@ -157,6 +157,282 @@ describe("orchestrate-parent Stop", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("allows [orchestrator]: recap", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[orchestrator]: child done",
+        workspaceRoot: ws,
+        sessionId: "s-orch-recap",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-orch-recap",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("allows role tags [grunt]: [implementer]: [thinker]: [handoff]:", () => {
+    const ws = workspace();
+    for (const tag of ["grunt", "implementer", "thinker", "handoff"] as const) {
+      const sid = `s-role-${tag}`;
+      const result = runHook(
+        {
+          hookEventName: "Stop",
+          reason: "end_turn",
+          lastAssistantMessage: `[${tag}]: ok`,
+          workspaceRoot: ws,
+          sessionId: sid,
+        },
+        { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
+    }
+  });
+
+  it("blocks [agent]: recap", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[agent]: child done",
+        workspaceRoot: ws,
+        sessionId: "s-agent-recap",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-agent-recap",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).decision).toBe("block");
+  });
+
+  it("allows recap when the tag is not the first line", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "shipped the change\n[orchestrator]: done",
+        workspaceRoot: ws,
+        sessionId: "s-recap-later",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        SESSION_ID: "s-recap-later",
+        GROK_SESSION_ID: "s-recap-later",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("allows last_assistant_message snake_case recap", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        last_assistant_message: "[orchestrator]: snake",
+        workspaceRoot: ws,
+        sessionId: "s-snake-msg",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-snake-msg",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("transcript-only [orchestrator]: allows when payload is empty", () => {
+    const ws = workspace();
+    const tp = path.join(ws, "transcript.jsonl");
+    fs.writeFileSync(
+      tp,
+      [
+        JSON.stringify({
+          type: "user",
+          message: { role: "user", content: "hi" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          message: {
+            content: [{ type: "tool_use", id: "1", name: "Agent", input: {} }],
+          },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          message: { content: [{ type: "text", text: "[orchestrator]: from transcript" }] },
+        }),
+      ].join("\n") + "\n",
+    );
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        workspaceRoot: ws,
+        sessionId: "s-tr-only",
+        transcript_path: tp,
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-tr-only",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("payload [agent]: wins over transcript [orchestrator]:", () => {
+    const ws = workspace();
+    const tp = path.join(ws, "transcript.jsonl");
+    fs.writeFileSync(
+      tp,
+      JSON.stringify({
+        type: "assistant",
+        message: { content: [{ type: "text", text: "[orchestrator]: from transcript" }] },
+      }) + "\n",
+    );
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[agent]: payload",
+        workspaceRoot: ws,
+        sessionId: "s-payload-wins",
+        transcriptPath: tp,
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-payload-wins",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).decision).toBe("block");
+  });
+
+  it("STOP_REASONS are 3 unique strings without /handoff or [agent]:", () => {
+    const ws = workspace();
+    const env = {
+      GROK_HOOK_EVENT: "stop",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: "s-reasons",
+    };
+    const payload = {
+      hookEventName: "Stop",
+      reason: "end_turn",
+      lastAssistantMessage: implMsg,
+      workspaceRoot: ws,
+      sessionId: "s-reasons",
+    };
+    const reasons: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const result = runHook(payload, env);
+      const json = JSON.parse(result.stdout);
+      expect(json.decision).toBe("block");
+      expect(json.reason.length).toBeLessThan(600);
+      expect(json.reason).not.toMatch(/\/handoff/);
+      expect(json.reason).not.toMatch(/\[agent\]:/);
+      expect(json.reason).toMatch(/\[orchestrator\]:/);
+      reasons.push(json.reason);
+    }
+    expect(new Set(reasons).size).toBe(3);
+  });
+
+  it("logs parent-stop telemetry without message body", () => {
+    const ws = workspace();
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[orchestrator]: ok",
+        workspaceRoot: ws,
+        sessionId: "s-tel-ok",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-tel-ok",
+      },
+    );
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "no recap here",
+        workspaceRoot: ws,
+        sessionId: "s-tel-block",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-tel-block",
+      },
+    );
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        stop_hook_active: true,
+        lastAssistantMessage: "no recap here",
+        workspaceRoot: ws,
+        sessionId: "s-tel-sha",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-tel-sha",
+      },
+    );
+    const rows = readTelemetry(ws).filter((r) => r.event === "parent-stop");
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    const ok = rows.find((r) => r.recap === true);
+    expect(ok).toMatchObject({
+      recap: true,
+      recapSource: "payload",
+      failOpen: false,
+      stopHookActive: false,
+    });
+    const blocked = rows.find((r) => r.recap === false && r.stopHookActive === false);
+    expect(blocked).toMatchObject({
+      recap: false,
+      recapSource: "payload",
+      failOpen: false,
+      stopHookActive: false,
+    });
+    expect(blocked.attempt).toBe(1);
+    const sha = rows.find((r) => r.stopHookActive === true);
+    expect(sha).toMatchObject({
+      recap: false,
+      recapSource: "none",
+      failOpen: true,
+      stopHookActive: true,
+    });
+    for (const r of rows) {
+      expect(r).not.toHaveProperty("lastAssistantMessage");
+      expect(r).not.toHaveProperty("message");
+      expect(r).not.toHaveProperty("body");
+      expect(r).not.toHaveProperty("msg");
+      expect(JSON.stringify(r)).not.toMatch(/no recap here/);
+      expect(JSON.stringify(r)).not.toMatch(/\[orchestrator\]: ok/);
+    }
+  });
+
   it("handoff skill ships to every host from one SSOT", () => {
     const ssot = fs.readFileSync(
       path.join(root, ".rulesync/skills/handoff/SKILL.md"),
@@ -468,6 +744,66 @@ describe("orchestrate-parent parent write", () => {
         toolInput: {
           file_path: path.join(ws, ".tmp/grunt/notes.md"),
           content: VALID_HANDOFF,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout).decision).toBe("deny");
+  });
+
+  it("rewrites outside-ws scratch Write into workspace before handoff/plans check", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: "/tmp/host/.tmp/grunt/handoffs/draft.md",
+          content: VALID_HANDOFF,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.decision).toBeUndefined();
+    expect(out.hookSpecificOutput.updatedInput.file_path).toMatch(
+      new RegExp(
+        `${path
+          .join(ws, ".tmp/grunt/handoffs/1-sync-skills-to-hosts-")
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
+      ),
+    );
+  });
+
+  it("does not rewrite escaping scratch into workspace", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: "/tmp/host/.tmp/grunt/../../etc/passwd",
+          content: VALID_HANDOFF,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout).decision).toBe("deny");
+  });
+
+  it("Claude-style Edit is not parent-allowed", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "Edit",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/plans/draft.md"),
+          content: VALID_THINKER,
         },
         workspaceRoot: ws,
       },

@@ -2,19 +2,26 @@
 /** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan/persistHandoff writes.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
-Stop: [agent]:/[handoff]: recap | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
-Fail-open: parse/crash → empty stdout, exit 0. Explicit JSON only when denying.
+Stop: any-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]: recap
+| parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
+Empty lastAssistantMessage → transcript_path tail-scan. Fail-open: parse/crash → empty stdout, exit 0.
 */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { rewriteSpawnToolInput } from "../../scripts/scrub-spawn-prompt.mjs";
 import {
+  MAX_PROMPT_CHARS,
+  rewriteSpawnToolInput,
+  spawnCapReason,
+} from "../../scripts/scrub-spawn-prompt.mjs";
+import {
+  denyResponse,
   fatHookOutput,
   fileSizeBytes,
   isWorkspaceGruntJob,
   processFatTools,
   resolveReadPath,
+  rewriteGruntScratchPath,
   subagentTypeOf,
 } from "../../scripts/gate-fat-tools.mjs";
 import { persistPlan } from "../../scripts/persist-plan.mjs";
@@ -24,26 +31,24 @@ import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
 import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs";
 
 const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
-const STOP_REASONS = [
-  "Violation: parent replied without a [agent]: recap or /parent escape.\n" +
+export const STOP_REASONS = [
+  "Violation: parent replied without a recap tag.\n" +
     "DO NOT stop. Continue IN THIS RESPONSE:\n" +
-    "1. Spawn grunt|implementer|thinker for the pending work.\n" +
-    "2. Reply with the `[agent]:` recap only.\n" +
-    "If every spawned child already returned and the turn is done, reply with the `[agent]:` recap now.\n" +
-    "If context is long, use /handoff.",
-  "Second violation: still no [agent]: recap.\n" +
+    "1. Spawn grunt|implementer|thinker if work remains.\n" +
+    "2. Recap with `[orchestrator]:` or the child role tag (`[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`).\n" +
+    "If every spawned child already returned and the turn is done, recap now.",
+  "Second violation: still no recap tag.\n" +
     "DO NOT stop. Right now, in this same response:\n" +
-    "1. Spawn grunt|implementer|thinker.\n" +
-    "2. Then reply with only the `[agent]:` recap line.\n" +
-    "Already done and every child returned? Send the `[agent]:` recap immediately.\n" +
-    "Context too long? Use /handoff.",
+    "1. Spawn grunt|implementer|thinker if needed.\n" +
+    "2. Then recap only with `[orchestrator]:` or the matching child role tag.\n" +
+    "Already done and every child returned? Send that recap immediately.",
   "Third violation: recap still missing.\n" +
     "This is the last check before fail-open. DO NOT stop:\n" +
-    "1. Spawn the correct agent for the remaining work.\n" +
-    "2. Reply with `[agent]:` recap only, nothing else.\n" +
-    "Complete with all children returned? Send the recap now.\n" +
-    "Long context? Use /handoff.",
+    "1. Spawn the correct agent for remaining work if needed.\n" +
+    "2. Reply with `[orchestrator]:` or the child role tag only, nothing else.\n" +
+    "Complete with all children returned? Send the recap now.",
 ];
+const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
   "todowrite",
   "getcommandorsubagentoutput",
@@ -107,7 +112,8 @@ function preToolUse(data) {
     return 0;
   }
   if (SPAWN_TOOLS.has(toolKey)) {
-    const updated = rewriteSpawn(toolInput);
+    const updated = rewriteSpawn(toolInput, data);
+    if (updated && updated.__denied) return 0;
     if (updated) {
       emit({
         hookSpecificOutput: {
@@ -222,12 +228,14 @@ function parentWrite(data, toolInput) {
     return 0;
   }
   const ws = workspaceRootOf(data);
-  const rawPath =
+  let rawPath =
     toolInput.file_path ||
     toolInput.filePath ||
     toolInput.path ||
     toolInput.target_file ||
     "";
+  const rewritten = rewriteGruntScratchPath(rawPath, ws);
+  if (rewritten) rawPath = rewritten;
   const handoff = isUnderHandoffs(rawPath, ws);
   if (!handoff && !isUnderPlans(rawPath, ws)) {
     emit({ decision: "deny", reason: DENY_REASON });
@@ -256,9 +264,20 @@ function parentWrite(data, toolInput) {
   return 0;
 }
 
-function rewriteSpawn(toolInput) {
+function rewriteSpawn(toolInput, data) {
   // Type default + intent-scrub in one updatedInput (last-wins with scrub-spawn).
-  return rewriteSpawnToolInput(toolInput, { defaultGrunt: true });
+  const updated = rewriteSpawnToolInput(toolInput, { defaultGrunt: true });
+  const prompt =
+    updated && typeof updated.prompt === "string"
+      ? updated.prompt
+      : toolInput && typeof toolInput.prompt === "string"
+        ? toolInput.prompt
+        : "";
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    emit(denyResponse(spawnCapReason(workspaceRootOf(data))));
+    return { __denied: true };
+  }
+  return updated;
 }
 
 function postToolUse(data) {
@@ -305,24 +324,113 @@ function userPromptSubmit(data) {
   return 0;
 }
 
-function isChildRecap(msg) {
+const RECAP_TAG_RE =
+  /^\[(?:orchestrator|grunt|implementer|thinker|handoff)\]:/;
+
+export function isRecap(msg) {
   const lines = String(msg || "").split("\n");
-  let firstNonEmpty = "";
   for (const line of lines) {
-    if (line.trim() !== "") {
-      firstNonEmpty = line;
-      break;
-    }
+    const stripped = line.replace(/^[\s`*_>]+/, "");
+    if (RECAP_TAG_RE.test(stripped)) return true;
   }
-  const stripped = firstNonEmpty.replace(/^[\s`*_>]+/, "");
-  return /^\[(?:grunt|implementer|thinker|handoff)\]:/.test(stripped);
+  return false;
+}
+
+function payloadAssistantMessage(data) {
+  if (!data || typeof data !== "object") return "";
+  const camel = data.lastAssistantMessage;
+  if (camel != null && String(camel) !== "") return String(camel);
+  const snake = data.last_assistant_message;
+  if (snake != null && String(snake) !== "") return String(snake);
+  return "";
+}
+
+function isAssistantRecord(obj) {
+  if (!obj || typeof obj !== "object") return false;
+  const type = String(obj.type || "").toLowerCase();
+  if (type === "user" || type === "human" || type === "tool" || type === "tool_result") {
+    return false;
+  }
+  if (type === "assistant") return true;
+  const role = String(
+    obj.role || (obj.message && obj.message.role) || "",
+  ).toLowerCase();
+  if (role === "user" || role === "human") return false;
+  return role === "assistant";
+}
+
+function assistantTextFromRecord(obj) {
+  if (!isAssistantRecord(obj)) return null;
+  const msg = obj.message && typeof obj.message === "object" ? obj.message : obj;
+  const content = msg.content ?? obj.content;
+  if (Array.isArray(content)) {
+    const texts = [];
+    for (const part of content) {
+      if (!part || typeof part !== "object") continue;
+      const pt = String(part.type || "");
+      if (pt === "tool_use" || pt === "tool_result" || pt === "function_call") continue;
+      if (typeof part.text === "string" && part.text) texts.push(part.text);
+    }
+    const joined = texts.join("\n").trim();
+    return joined ? joined : null;
+  }
+  if (typeof content === "string" && content.trim()) return content;
+  if (typeof obj.text === "string" && obj.text.trim()) return obj.text;
+  return null;
+}
+
+export function lastAssistantFromTranscript(filePath) {
+  try {
+    if (!filePath) return "";
+    const st = fs.statSync(filePath);
+    const start = Math.max(0, st.size - TRANSCRIPT_TAIL_BYTES);
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const buf = Buffer.alloc(st.size - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      const text = buf.toString("utf8");
+      const lines = text.split("\n");
+      if (start > 0 && lines.length) lines.shift();
+      let last = "";
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t) continue;
+        let rec;
+        try {
+          rec = JSON.parse(t);
+        } catch {
+          continue;
+        }
+        const extracted = assistantTextFromRecord(rec);
+        if (extracted) last = extracted;
+      }
+      return last;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+function logParentStop(data, fields) {
+  logTelemetry("parent-stop", fields, workspaceRootOf(data));
 }
 
 function stop(data) {
   if (data.subagentType || data.subagent_type) {
     return interceptNeed(data, "Stop");
   }
-  if (data.stopHookActive || data.stop_hook_active) return 0;
+  if (data.stopHookActive || data.stop_hook_active) {
+    logParentStop(data, {
+      recap: false,
+      recapSource: "none",
+      attempt: 0,
+      failOpen: true,
+      stopHookActive: true,
+    });
+    return 0;
+  }
   const reason = String(data.reason || "");
   if (reason && reason !== "end_turn") return 0;
 
@@ -335,8 +443,28 @@ function stop(data) {
     return 0;
   }
 
-  const msg = data.lastAssistantMessage || data.last_assistant_message || "";
-  if (isChildRecap(msg)) return 0;
+  const payloadMsg = payloadAssistantMessage(data);
+  let recapSource = "none";
+  let msg = "";
+  if (payloadMsg) {
+    msg = payloadMsg;
+    recapSource = "payload";
+  } else {
+    const tp = data.transcript_path || data.transcriptPath || "";
+    msg = lastAssistantFromTranscript(tp);
+    if (msg) recapSource = "transcript";
+  }
+
+  if (isRecap(msg)) {
+    logParentStop(data, {
+      recap: true,
+      recapSource,
+      attempt: 0,
+      failOpen: false,
+      stopHookActive: false,
+    });
+    return 0;
+  }
 
   const stopStamp = stampPath(data, "stop-block");
   let n = 0;
@@ -344,11 +472,27 @@ function stop(data) {
     n = parseInt(fs.readFileSync(stopStamp, "utf8"), 10);
     if (!Number.isFinite(n) || n < 0) n = 0;
   }
-  if (n >= MAX_STOP) return 0;
+  if (n >= MAX_STOP) {
+    logParentStop(data, {
+      recap: false,
+      recapSource,
+      attempt: n,
+      failOpen: true,
+      stopHookActive: false,
+    });
+    return 0;
+  }
   if (stopStamp) {
     fs.mkdirSync(path.dirname(stopStamp), { recursive: true });
     fs.writeFileSync(stopStamp, String(n + 1));
   }
+  logParentStop(data, {
+    recap: false,
+    recapSource,
+    attempt: n + 1,
+    failOpen: false,
+    stopHookActive: false,
+  });
   const reasonText = STOP_REASONS[Math.min(n, STOP_REASONS.length - 1)];
   emit({ decision: "block", reason: reasonText });
   return 0;

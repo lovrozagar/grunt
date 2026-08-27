@@ -11,8 +11,9 @@
         "timeout": 5
       },
       {
-        // Fat Read/Grep/Glob/Bash: inject limits, path denylist, implementer dump deny.
-        "matcher": "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+        // Fat Read/Grep/Glob/Bash + Write/Edit scratch rewrite (never deny writes).
+        // Parent-deny stays Grok-only (orchestrate-parent.js).
+        "matcher": "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command|Write|Edit|write|search_replace",
         "type": "command",
         "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/gate-fat-tools.mjs\"",
         "timeout": 5

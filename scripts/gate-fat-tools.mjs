@@ -42,6 +42,14 @@ const READ_TOOLS = new Set(["read", "readfile"]);
 const GREP_TOOLS = new Set(["grep", "grepsearch"]);
 const GLOB_TOOLS = new Set(["glob", "listdir"]);
 const BASH_TOOLS = new Set(["bash", "runterminalcommand"]);
+const WRITE_TOOLS = new Set(["write", "edit", "searchreplace"]);
+const WRITE_PATH_FIELDS = [
+  "path",
+  "file_path",
+  "filePath",
+  "target_file",
+  "targetFile",
+];
 const PATH_FIELDS = [
   "path",
   "file_path",
@@ -122,6 +130,47 @@ export function hookResponse(updated) {
       updatedInput: updated,
     },
   };
+}
+
+export function rewriteGruntScratchPath(filePath, workspaceRoot) {
+  if (filePath == null) return null;
+  const raw = String(filePath);
+  if (!raw || !workspaceRoot) return null;
+  const posix = raw.replace(/\\/g, "/");
+  const marker = ".tmp/grunt/";
+  const idx = posix.indexOf(marker);
+  if (idx === -1) return null;
+
+  const wsRoot = path.resolve(workspaceRoot);
+  const absIn = path.isAbsolute(raw)
+    ? path.resolve(raw)
+    : path.resolve(wsRoot, raw);
+  const relWs = path.relative(wsRoot, absIn);
+  if (relWs !== "" && !relWs.startsWith("..") && !path.isAbsolute(relWs)) {
+    return null;
+  }
+
+  const rel = posix.slice(idx + marker.length);
+  if (!rel) return null;
+  if (path.posix.isAbsolute(rel) || rel.startsWith("/")) return null;
+  const relNorm = path.posix.normalize(rel);
+  if (
+    !relNorm ||
+    relNorm === "." ||
+    relNorm === ".." ||
+    relNorm.startsWith("../") ||
+    rel.split("/").includes("..") ||
+    relNorm.split("/").includes("..")
+  ) {
+    return null;
+  }
+  if (path.posix.isAbsolute(relNorm)) return null;
+
+  const destRoot = path.resolve(wsRoot, ".tmp", "grunt");
+  const dest = path.resolve(destRoot, relNorm);
+  const check = path.relative(destRoot, dest);
+  if (!check || check.startsWith("..") || path.isAbsolute(check)) return null;
+  return dest;
 }
 
 export function workspaceRootOf(data) {
@@ -337,6 +386,21 @@ export function processFatTools(data) {
   const toolKey = eventKey(data.toolName || data.tool_name || "");
   const input = toolInputOf(data);
   if (!input) return null;
+  const isWrite = WRITE_TOOLS.has(toolKey);
+  if (isWrite) {
+    const ws = workspaceRootOf(data);
+    const next = Object.assign({}, input);
+    let changed = false;
+    for (const key of WRITE_PATH_FIELDS) {
+      if (typeof next[key] !== "string" || !next[key]) continue;
+      const dest = rewriteGruntScratchPath(next[key], ws);
+      if (dest && dest !== next[key]) {
+        next[key] = dest;
+        changed = true;
+      }
+    }
+    return changed ? { type: "rewrite", updatedInput: next } : null;
+  }
   const sub = subagentTypeOf(data);
   if (sub === "grunt") return null;
 

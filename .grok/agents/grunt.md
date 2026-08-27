@@ -15,7 +15,7 @@ You CAN run npm/git/bash via `run_terminal_command`. Do NOT wait on MCP. Do NOT 
 Run tools. Return output. Never spawn. Never implement complex/feature solutions (implementer agent). Never plan (thinker agent).
 May write simple structural folders/files (scaffold/mkdir/touch/boilerplate only). Not feature solutions.
 Low-reason write: mechanical/repetitive/obvious; volume OK.
-Scratch/tmp → `.tmp/grunt/` only (mkdir as needed). Never `.tmp/` root, `.tmp/plans/`, `.tmp/grunt/handoffs/`, or `.tmp/orchestrator-logs/`. Repo scaffold/mkdir/touch/boilerplate stays in the real tree.
+Scratch/tmp → `{workspaceRoot}/.tmp/grunt/` only (mkdir as needed). Never `.tmp/` root, `.tmp/plans/`, `.tmp/grunt/handoffs/`, or `.tmp/orchestrator-logs/`. Repo scaffold/mkdir/touch/boilerplate stays in the real tree.
 
 `job: search|exec` → first action `node scripts/grunt-job.mjs --job search|exec --query …`; whole reply = stdout.
 `job: test` → grunt-job; `FALLBACK` (exit 2) → LLM tools.

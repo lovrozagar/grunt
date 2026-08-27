@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { scrubText } from "./scrub-text-lib.mjs";
+import { denyResponse } from "./gate-fat-tools.mjs";
 
 const ALLOWED_TYPES = new Set(["grunt", "implementer", "thinker"]);
-export const MAX_PROMPT_CHARS = 8000;
+export const MAX_PROMPT_CHARS = 100000;
 export const TRUNCATE_SUFFIX = "…[truncated]";
 /** `router` is a legacy transcript prefix; keep matching it to strip old pastes. */
 const TRANSCRIPT_PREFIX =
@@ -72,14 +73,25 @@ export function extractVerdictBlocks(text) {
   return { body: body.join("\n"), blocks };
 }
 
-export function truncatePrompt(text, max = MAX_PROMPT_CHARS) {
-  const s = String(text);
-  if (s.length <= max) return s;
-  const { body, blocks } = extractVerdictBlocks(s);
-  const verdictPart = blocks.length ? "\n" + blocks.join("\n") : "";
-  const budget = max - verdictPart.length - TRUNCATE_SUFFIX.length;
-  const cut = Math.max(0, budget);
-  return body.slice(0, cut) + TRUNCATE_SUFFIX + verdictPart;
+export function truncatePrompt(text, _max = MAX_PROMPT_CHARS) {
+  return String(text);
+}
+
+export function workspaceRootOf(data) {
+  return (
+    process.env.GROK_WORKSPACE_ROOT ||
+    (data && (data.workspaceRoot || data.workspace_root || data.cwd)) ||
+    process.env.CLAUDE_PROJECT_DIR ||
+    process.cwd() ||
+    ""
+  );
+}
+
+export function spawnCapReason(workspaceRoot) {
+  const root = workspaceRoot || process.cwd() || "";
+  return (
+    `spawn prompt exceeds ${MAX_PROMPT_CHARS} chars after scrub; write it under ${root}/.tmp/plans/ and re-spawn with that abs path`
+  );
 }
 
 const INLINE_TRANSCRIPT =
@@ -108,13 +120,7 @@ export function capSpawnPrompt(prompt) {
   const again = extractVerdictBlocks(s);
   const blocks = extracted.blocks.concat(again.blocks);
   const verdictPart = blocks.length ? "\n" + blocks.join("\n") : "";
-  const maxCore = Math.max(0, MAX_PROMPT_CHARS - verdictPart.length);
-  let core = again.body;
-  if (core.length > maxCore) {
-    const cut = Math.max(0, maxCore - TRUNCATE_SUFFIX.length);
-    core = core.slice(0, cut) + TRUNCATE_SUFFIX;
-  }
-  return (core + verdictPart).trim();
+  return (again.body + verdictPart).trim();
 }
 
 export function rewriteSpawnToolInput(toolInput, { defaultGrunt = false } = {}) {
@@ -160,9 +166,19 @@ export function processHookPayload(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   let toolInput = data.toolInput;
   if (toolInput == null) toolInput = data.tool_input;
-  return rewriteSpawnToolInput(toolInput, {
+  const updated = rewriteSpawnToolInput(toolInput, {
     defaultGrunt: grokDefaultGrunt(),
   });
+  const prompt =
+    updated && typeof updated.prompt === "string"
+      ? updated.prompt
+      : toolInput && typeof toolInput.prompt === "string"
+        ? toolInput.prompt
+        : "";
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    return denyResponse(spawnCapReason(workspaceRootOf(data)));
+  }
+  return updated;
 }
 
 export function hookResponse(updated) {
@@ -179,6 +195,10 @@ function main() {
     const data = readJsonValue();
     const updated = processHookPayload(data);
     if (!updated) return 0;
+    if (updated.decision === "deny") {
+      process.stdout.write(JSON.stringify(updated));
+      return 0;
+    }
     process.stdout.write(JSON.stringify(hookResponse(updated)));
     return 0;
   } catch {

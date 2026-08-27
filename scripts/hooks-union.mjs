@@ -103,7 +103,7 @@ function gruntPreToolUse() {
       hooks: [hookCmd(SCRUB, 5)],
     },
     {
-      matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+      matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command|Write|Edit|write|search_replace",
       hooks: [hookCmd(GATE_FAT, 5)],
     },
   ];
@@ -205,7 +205,7 @@ function consumerNamed(root) {
   };
   named["gate-fat-tools"] = {
     event: "PreToolUse",
-    matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+    matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command|Write|Edit|write|search_replace",
     command: GATE_FAT,
     timeout: 5,
   };

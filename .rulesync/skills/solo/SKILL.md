@@ -10,7 +10,7 @@ Session mode, not one-turn. Persists until `/cascade` or session end.
 This session: cascade suspended. You are one normal agent.
 
 - Do not spawn. No grunt|implementer|thinker.
-- No `[agent]:` recap. Answer the user directly.
+- No recap tags. Do not recap `[orchestrator]:`. Answer the user directly.
 - No spawn-first rule. No `need:`/`verdict:` grammar.
 - Voice unchanged: `.rulesync/reference/output.md`. `/explain` is still the voice escape.
 

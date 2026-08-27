@@ -47,7 +47,7 @@ const gruntPre = [
     ],
   },
   {
-    matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command",
+    matcher: "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command|Write|Edit|write|search_replace",
     hooks: [
       {
         type: "command",

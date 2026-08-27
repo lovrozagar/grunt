@@ -22,6 +22,7 @@ import {
   pathIsDenied,
   processFatTools,
   processHookPayload,
+  rewriteGruntScratchPath,
 } from "./gate-fat-tools.mjs";
 import { ORCHESTRATOR_LOGS_DIR } from "./telemetry.mjs";
 
@@ -458,6 +459,92 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
 describe("processHookPayload", () => {
   it("returns null when there is nothing to do", () => {
     expect(processHookPayload({ toolName: "todo_write", toolInput: {} })).toBeNull();
+  });
+});
+
+describe("rewriteGruntScratchPath", () => {
+  const ws = "/home/ecomet/Development/grunt-test-2";
+
+  it("rewrites outside-ws */.tmp/grunt/* into workspace scratch", () => {
+    expect(
+      rewriteGruntScratchPath("/tmp/host/.tmp/grunt/notes.md", ws),
+    ).toBe(path.join(ws, ".tmp/grunt/notes.md"));
+    expect(
+      rewriteGruntScratchPath("/var/foo/.tmp/grunt/handoffs/draft.md", ws),
+    ).toBe(path.join(ws, ".tmp/grunt/handoffs/draft.md"));
+  });
+
+  it("rejects empty, .., and escaped rel", () => {
+    expect(rewriteGruntScratchPath("", ws)).toBeNull();
+    expect(rewriteGruntScratchPath("/tmp/x/.tmp/grunt/", ws)).toBeNull();
+    expect(
+      rewriteGruntScratchPath("/tmp/x/.tmp/grunt/../../etc/passwd", ws),
+    ).toBeNull();
+    expect(
+      rewriteGruntScratchPath("/tmp/x/.tmp/grunt/../escape.md", ws),
+    ).toBeNull();
+    expect(rewriteGruntScratchPath("/tmp/x/.tmp/grunt//abs", ws)).not.toBe(
+      "/abs",
+    );
+  });
+
+  it("does not rewrite in-workspace paths or non-scratch", () => {
+    expect(
+      rewriteGruntScratchPath(path.join(ws, ".tmp/grunt/notes.md"), ws),
+    ).toBeNull();
+    expect(rewriteGruntScratchPath(path.join(ws, "src/index.ts"), ws)).toBeNull();
+    expect(rewriteGruntScratchPath("src/index.ts", ws)).toBeNull();
+  });
+});
+
+describe("processFatTools Write|Edit scratch rewrite", () => {
+  const ws = "/home/ecomet/Development/grunt-test-2";
+
+  it("rewrites Write/Edit/write/search_replace path fields and never denies", () => {
+    const outside = "/tmp/host/.tmp/grunt/notes.md";
+    const dest = path.join(ws, ".tmp/grunt/notes.md");
+    for (const toolName of ["Write", "Edit", "write", "search_replace"] as const) {
+      const field = toolName === "search_replace" ? "file_path" : "file_path";
+      const out = processFatTools({
+        toolName,
+        toolInput: { [field]: outside, content: "x" },
+        workspaceRoot: ws,
+      });
+      expect(out).toEqual({
+        type: "rewrite",
+        updatedInput: { [field]: dest, content: "x" },
+      });
+    }
+  });
+
+  it("Claude-style parent Write to src does not deny", () => {
+    expect(
+      processFatTools({
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "src/index.ts"), content: "export {}\n" },
+        workspaceRoot: ws,
+      }),
+    ).toBeNull();
+    expect(
+      processHookPayload({
+        toolName: "Edit",
+        toolInput: { file_path: "src/index.ts", old_string: "a", new_string: "b" },
+        workspaceRoot: ws,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not rewrite an escaping scratch path and still does not deny", () => {
+    expect(
+      processFatTools({
+        toolName: "Write",
+        toolInput: {
+          file_path: "/tmp/x/.tmp/grunt/../../etc/passwd",
+          content: "nope",
+        },
+        workspaceRoot: ws,
+      }),
+    ).toBeNull();
   });
 });
 

@@ -230,21 +230,51 @@ describe("capSpawnPrompt transcript + truncate", () => {
     expect(out).toContain("ship it");
   });
 
-  it("hard-truncates over-cap prompts and keeps verdict blocks", () => {
+  it("denies over-cap prompts after scrub without slicing or …[truncated]", () => {
     const template = fs.readFileSync(
       path.join(here, "fixtures/spawn-overcap.txt"),
       "utf8",
     );
-    const raw = template.replace("XXXX_PAD", "x".repeat(9000));
+    const raw = template.replace("XXXX_PAD", "x".repeat(MAX_PROMPT_CHARS + 1));
     const out = capSpawnPrompt(raw);
-    expect(out.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS + 200);
-    expect(out).toContain(TRUNCATE_SUFFIX);
+    expect(out.length).toBeGreaterThan(MAX_PROMPT_CHARS);
+    expect(out).not.toContain(TRUNCATE_SUFFIX);
     expect(out).toContain("verdict: ok");
     expect(out).toContain("/home/ecomet/Development/grunt-test-2/README.md");
-    expect(
-      rewriteSpawnToolInput({ prompt: raw, subagent_type: "implementer" })
-        ?.prompt,
-    ).toBe(out);
+    const rewritten = rewriteSpawnToolInput({
+      prompt: raw,
+      subagent_type: "implementer",
+    });
+    if (rewritten && typeof rewritten.prompt === "string") {
+      expect(rewritten.prompt).not.toContain(TRUNCATE_SUFFIX);
+      expect(rewritten.prompt.length).toBeGreaterThan(MAX_PROMPT_CHARS);
+    }
+    const ws = root;
+    const denied = processHookPayload({
+      toolInput: { prompt: raw, subagent_type: "implementer" },
+      workspaceRoot: ws,
+    });
+    expect(denied).toMatchObject({ decision: "deny" });
+    expect(denied.reason).toContain(`${ws}/.tmp/plans/`);
+    expect(denied.reason).toMatch(/re-spawn/i);
+    expect(denied.reason).toMatch(/abs path/i);
+    expect(JSON.stringify(denied)).not.toContain(TRUNCATE_SUFFIX);
+    expect(denied.hookSpecificOutput?.updatedInput).toBeUndefined();
+  });
+
+  it("allows prompts at the cap after scrub", () => {
+    expect(MAX_PROMPT_CHARS).toBe(100000);
+    const raw = "x".repeat(MAX_PROMPT_CHARS);
+    const out = capSpawnPrompt(raw);
+    expect(out.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
+    expect(out).not.toContain(TRUNCATE_SUFFIX);
+    const payload = processHookPayload({
+      toolInput: { prompt: raw, subagent_type: "implementer" },
+      workspaceRoot: root,
+    });
+    if (payload && payload.decision) {
+      expect(payload.decision).not.toBe("deny");
+    }
   });
 });
 
@@ -260,5 +290,49 @@ describe("processHookPayload", () => {
 
   it("grokDefaultGrunt is false unless GROK_HOOK_EVENT is set", () => {
     expect(typeof grokDefaultGrunt()).toBe("boolean");
+  });
+});
+
+describe("orchestrate-parent spawn cap deny", () => {
+  it("denies Grok spawn over cap without updatedInput slice", () => {
+    const prompt = "x".repeat(MAX_PROMPT_CHARS + 1);
+    const result = runHook(
+      orchParent,
+      {
+        hookEventName: "PreToolUse",
+        toolName: "spawn_subagent",
+        toolInput: { prompt, subagent_type: "implementer" },
+        workspaceRoot: root,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: root },
+    );
+    expect(result.status).toBe(0);
+    const json = JSON.parse(result.stdout);
+    expect(json.decision).toBe("deny");
+    expect(json.reason).toContain(`${root}/.tmp/plans/`);
+    expect(json.reason).toMatch(/re-spawn/i);
+    expect(result.stdout).not.toContain(TRUNCATE_SUFFIX);
+    expect(json.hookSpecificOutput?.updatedInput).toBeUndefined();
+  });
+
+  it("allows Grok spawn under cap", () => {
+    const result = runHook(
+      orchParent,
+      {
+        hookEventName: "PreToolUse",
+        toolName: "spawn_subagent",
+        toolInput: {
+          prompt: "You are implementer subagent. ship it",
+          subagent_type: "implementer",
+        },
+        workspaceRoot: root,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: root },
+    );
+    expect(result.status).toBe(0);
+    if (result.stdout) {
+      const json = JSON.parse(result.stdout);
+      expect(json.decision).not.toBe("deny");
+    }
   });
 });

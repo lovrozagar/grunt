@@ -27,7 +27,7 @@ Contributors to this repo only: local `npm i && npm test`.
     context engineering
 - max reasoning and effort where needed and minimal reasoning and effort where not needed
 - agents:
-    - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[agent]:` echo. `/parent` one-turn only; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md` and hands the session to a fresh one.
+    - orchestrator (low model, low effort) -> always spawn+prompt; never user-facing tokens except `[orchestrator]:` (or child role tag) echo. `/parent` one-turn only; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md` and hands the session to a fresh one.
 - subagents:
     - grunt (low model, low effort) -> tools. facts/search/exec/git/web/test/low-reason mechanical write. never feature solution. never spawn.
     - implementer (medium model, medium effort) -> write already-defined solution. does not plan or invent design. never spawn.
