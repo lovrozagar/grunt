@@ -378,15 +378,18 @@ describe("orchestrate-parent Stop", () => {
       expect(json.reason.length).toBeLessThan(600);
       expect(json.reason).not.toMatch(/\/handoff/);
       expect(json.reason).not.toMatch(/\[agent\]:/);
-      expect(json.reason).toMatch(/XOR/);
+      expect(json.reason).not.toMatch(/XOR/);
       expect(json.reason).toMatch(/⚠/);
       expect(json.reason).toMatch(/validate/);
       expect(json.reason).toMatch(/sim/);
       expect(json.reason).toMatch(/spawn implementer/);
+      expect(json.reason).toMatch(/writes remain/);
       expect(json.reason).toMatch(/\[orchestrator\]:/);
       expect(json.reason).not.toMatch(/do not recap done/);
-      expect(json.reason).toMatch(/do not recap; spawn/);
-      expect(json.reason).toMatch(/do not glue done into the tag/);
+      expect(json.reason).not.toMatch(/do not recap; spawn/);
+      expect(json.reason).not.toMatch(/do not glue done into the tag/);
+      expect(json.reason).not.toMatch(/Violation:/);
+      expect(json.reason).not.toMatch(/DO NOT stop/);
       expect(json.reason).not.toMatch(/\[grunt done\]/);
       expect(json.reason).not.toMatch(/\[\[agent\] done\]/);
       expect(json.reason).not.toMatch(/Illegal:/);
@@ -396,6 +399,9 @@ describe("orchestrate-parent Stop", () => {
       reasons.push(json.reason);
     }
     expect(new Set(reasons).size).toBe(3);
+    expect(reasons[0]).toMatch(/^Spawn:/);
+    expect(reasons[1]).toMatch(/^Still spawn:/);
+    expect(reasons[2]).toMatch(/^Last spawn:/);
   });
 
   it("allows [orchestrator]: wait grunt", () => {
@@ -452,7 +458,7 @@ describe("orchestrate-parent Stop", () => {
     };
     const first = runHook(payload, env);
     expect(first.status).toBe(0);
-    expect(JSON.parse(first.stdout).reason).toMatch(/^Violation:/);
+    expect(JSON.parse(first.stdout).reason).toMatch(/^Spawn:/);
     const stopStamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `stop-block-${sid}`);
     expect(fs.existsSync(stopStamp)).toBe(true);
     const toolsUsed = path.join(ws, ORCHESTRATOR_LOGS_DIR, `tools-used-${sid}`);
@@ -474,9 +480,28 @@ describe("orchestrate-parent Stop", () => {
     expect(feedback.status).toBe(0);
     expect(fs.existsSync(stopStamp)).toBe(true);
     expect(fs.existsSync(toolsUsed)).toBe(false);
+    const blockedBanner = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt:
+          "Blocked by stop hook 'project/settings:subagent_stop[0].hooks[0]'",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(blockedBanner.status).toBe(0);
+    expect(fs.existsSync(stopStamp)).toBe(true);
     const second = runHook(payload, env);
     expect(second.status).toBe(0);
-    expect(JSON.parse(second.stdout).reason).toMatch(/^Second violation:/);
+    expect(JSON.parse(second.stdout).reason).toMatch(/^Still spawn:/);
+    const last = runHook(payload, env);
+    expect(last.status).toBe(0);
+    expect(JSON.parse(last.stdout).reason).toMatch(/^Last spawn:/);
     const later = runHook(
       {
         hookEventName: "UserPromptSubmit",
@@ -494,7 +519,7 @@ describe("orchestrate-parent Stop", () => {
     expect(fs.existsSync(stopStamp)).toBe(false);
     const again = runHook(payload, env);
     expect(again.status).toBe(0);
-    expect(JSON.parse(again.stdout).reason).toMatch(/^Violation:/);
+    expect(JSON.parse(again.stdout).reason).toMatch(/^Spawn:/);
   });
 
   it("logs parent-stop telemetry without message body", () => {
@@ -945,14 +970,18 @@ describe("orchestrate-parent parent write", () => {
         hookEventName: "PreToolUse",
         toolName: "Edit",
         toolInput: {
-          file_path: path.join(ws, ".tmp/plans/draft.md"),
-          content: VALID_THINKER,
+          file_path: path.join(ws, "src/index.ts"),
+          old_string: "a",
+          new_string: "b",
         },
         workspaceRoot: ws,
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(result.stdout).decision).toBe("deny");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
   });
 
   it("denies invalid plan under .tmp/plans/", () => {
@@ -1006,8 +1035,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       );
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({
-        decision: "deny",
-        reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+        decision: "allow",
       });
     }
     const rtk = runHook(
@@ -1021,7 +1049,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(rtk.stdout)).toMatchObject({ decision: "deny" });
+    expect(JSON.parse(rtk.stdout)).toMatchObject({ decision: "allow" });
   });
 
   it("denies ls; /parent then ls allowed that turn", () => {
@@ -1041,7 +1069,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
     const denied = runHook(lsPayload, env);
     expect(JSON.parse(denied.stdout)).toMatchObject({
       decision: "deny",
-      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+      reason: "spawn implementer|grunt|thinker",
     });
     const submit = runHook(
       {
@@ -1076,7 +1104,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
     );
     expect(JSON.parse(ls.stdout)).toMatchObject({
       decision: "deny",
-      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+      reason: "spawn implementer|grunt|thinker",
     });
     const web = runHook(
       {
@@ -1131,7 +1159,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(regex.stdout)).toMatchObject({ decision: "deny" });
+    expect(JSON.parse(regex.stdout)).toMatchObject({ decision: "allow" });
     const quoted = runHook(
       {
         hookEventName: "PreToolUse",
@@ -1143,7 +1171,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
       },
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
-    expect(JSON.parse(quoted.stdout)).toMatchObject({ decision: "deny" });
+    expect(JSON.parse(quoted.stdout)).toMatchObject({ decision: "allow" });
     const pipe = runHook(
       {
         hookEventName: "PreToolUse",
@@ -1706,5 +1734,224 @@ describe("orchestrate-parent /solo", () => {
     ]) {
       expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
     }
+  });
+});
+
+describe("parent-deny product Write/Edit/Bash/Skill", () => {
+  function pre(
+    ws: string,
+    extra: Record<string, unknown>,
+    env: NodeJS.ProcessEnv = {},
+  ) {
+    return runHook(
+      {
+        hookEventName: "PreToolUse",
+        workspaceRoot: ws,
+        ...extra,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws, ...env },
+    );
+  }
+
+  it("denies product Write without type or escape; allows escape then deny after Stop", () => {
+    const ws = workspace();
+    const sid = "deny-write";
+    const env = { GROK_SESSION_ID: sid };
+    for (const rel of ["apps/testapp/pages/empty-page.xml", "src/index.ts"]) {
+      const denied = pre(
+        ws,
+        {
+          toolName: "Write",
+          toolInput: {
+            file_path: path.join(ws, rel),
+            content: "x\n",
+          },
+          sessionId: sid,
+        },
+        env,
+      );
+      expect(JSON.parse(denied.stdout)).toMatchObject({
+        decision: "deny",
+        reason: "spawn implementer|grunt|thinker",
+      });
+    }
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/parent",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    const allowed = pre(
+      ws,
+      {
+        toolName: "Write",
+        toolInput: {
+          file_path: path.join(ws, "apps/testapp/pages/empty-page.xml"),
+          content: "x\n",
+        },
+        sessionId: sid,
+      },
+      env,
+    );
+    expect(JSON.parse(allowed.stdout)).toMatchObject({ decision: "allow" });
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[orchestrator]: parent turn",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+    );
+    const again = pre(
+      ws,
+      {
+        toolName: "Write",
+        toolInput: {
+          file_path: path.join(ws, "src/index.ts"),
+          content: "x\n",
+        },
+        sessionId: sid,
+      },
+      env,
+    );
+    expect(JSON.parse(again.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
+  });
+
+  it("implementer product Write is not parent-deny", () => {
+    const ws = workspace();
+    const result = pre(ws, {
+      toolName: "Write",
+      subagentType: "implementer",
+      toolInput: {
+        file_path: path.join(ws, "src/index.ts"),
+        content: "export {}\n",
+      },
+    });
+    const out = result.stdout ? JSON.parse(result.stdout) : {};
+    expect(out.decision).not.toBe("deny");
+  });
+
+  it("UUID-only agentId product Write is not parent-deny; empty parent Write is", () => {
+    const ws = workspace();
+    const dest = path.join(ws, "src/index.ts");
+    const uuid = "b2c6f0d4-0000-4000-8000-000000000000";
+    const child = pre(ws, {
+      toolName: "Write",
+      agentId: uuid,
+      toolInput: { file_path: dest, content: "export {}\n" },
+    });
+    const childOut = child.stdout ? JSON.parse(child.stdout) : {};
+    expect(childOut.decision).not.toBe("deny");
+    const snake = pre(ws, {
+      toolName: "Write",
+      agent_id: uuid,
+      toolInput: { file_path: dest, content: "export {}\n" },
+    });
+    const snakeOut = snake.stdout ? JSON.parse(snake.stdout) : {};
+    expect(snakeOut.decision).not.toBe("deny");
+    const spawned = pre(ws, {
+      toolName: "Write",
+      spawnedBy: uuid,
+      toolInput: { file_path: dest, content: "export {}\n" },
+    });
+    const spawnedOut = spawned.stdout ? JSON.parse(spawned.stdout) : {};
+    expect(spawnedOut.decision).not.toBe("deny");
+    const parent = pre(ws, {
+      toolName: "Write",
+      toolInput: { file_path: dest, content: "export {}\n" },
+    });
+    expect(JSON.parse(parent.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
+  });
+
+  it("denies Edit, non-grunt Bash, Skill create-page; allows write-plan and grunt-job", () => {
+    const ws = workspace();
+    plantGruntJob(ws);
+    const edit = pre(ws, {
+      toolName: "Edit",
+      toolInput: { file_path: path.join(ws, "src/index.ts"), old_string: "a", new_string: "b" },
+    });
+    expect(JSON.parse(edit.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
+    const bash = pre(ws, {
+      toolName: "Bash",
+      toolInput: { command: "ls" },
+    });
+    expect(JSON.parse(bash.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
+    const skill = pre(ws, {
+      toolName: "Skill",
+      toolInput: { skill: "create-page" },
+    });
+    expect(JSON.parse(skill.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "spawn implementer|grunt|thinker",
+    });
+    const writePlan = pre(ws, {
+      toolName: "Skill",
+      toolInput: { skill: "write-plan" },
+    });
+    expect(JSON.parse(writePlan.stdout)).toMatchObject({ decision: "allow" });
+    const gj = pre(ws, {
+      toolName: "Bash",
+      toolInput: {
+        command: "node scripts/grunt-job.mjs --job search --query foo",
+      },
+    });
+    expect(JSON.parse(gj.stdout)).toMatchObject({ decision: "allow" });
+  });
+
+  it("SSOT inlines maximal superterse every turn and create/change-files rows", () => {
+    for (const rel of [
+      ".rulesync/subagents/orchestrator.md",
+      ".rulesync/rules/overview.md",
+      ".rulesync/rules/CLAUDE.md",
+    ]) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      const body = text.replace(/^---[\s\S]*?---\s*/, "");
+      expect(body).toMatch(/maximal superterse/);
+      expect(body).toMatch(/every turn/);
+      expect(body).toMatch(/create\/change product files/);
+      expect(body).toMatch(/file writes remain/);
+    }
+  });
+
+  it("Claude settings PreToolUse parent-deny + one SubagentStop", () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(root, ".claude/settings.json"), "utf8"),
+    );
+    const pre = JSON.stringify(settings.hooks?.PreToolUse ?? []);
+    expect(pre).toMatch(/orchestrate-parent\.js/);
+    expect(pre).toMatch(/Write/);
+    expect(pre).toMatch(/Bash/);
+    expect(pre).toMatch(/Skill/);
+    const sub = settings.hooks?.SubagentStop ?? [];
+    const cmds = JSON.stringify(sub).match(/orchestrate-parent\.js/g) || [];
+    expect(cmds.length).toBe(1);
+    expect(fs.existsSync(path.join(root, ".claude/hooks/orchestrate-parent.json"))).toBe(
+      false,
+    );
+    const named = Object.keys(settings).filter((k) =>
+      /orchestrate-parent/i.test(k),
+    );
+    expect(named).toEqual([]);
   });
 });

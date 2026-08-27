@@ -84,6 +84,68 @@ describe("rewriteSpawnToolInput", () => {
       subagent_type: "grunt",
     });
   });
+
+  it("keeps subagent_type implementer; maps name/type; Explore→grunt", () => {
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", subagent_type: "implementer" },
+        { defaultGrunt: true },
+      ),
+    ).toBeNull();
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", name: "thinker" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({ prompt: "ship it", name: "thinker", subagent_type: "thinker" });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", type: "implementer" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({
+      prompt: "ship it",
+      type: "implementer",
+      subagent_type: "implementer",
+    });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", agent: "thinker" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({ prompt: "ship it", agent: "thinker", subagent_type: "thinker" });
+    expect(
+      rewriteSpawnToolInput({ prompt: "ship it" }, { defaultGrunt: true }),
+    ).toEqual({ prompt: "ship it", subagent_type: "grunt" });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", name: "Explore" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({ prompt: "ship it", name: "Explore", subagent_type: "grunt" });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", type: "Plan" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({ prompt: "ship it", type: "Plan", subagent_type: "grunt" });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", name: "general-purpose" },
+        { defaultGrunt: true },
+      ),
+    ).toEqual({
+      prompt: "ship it",
+      name: "general-purpose",
+      subagent_type: "grunt",
+    });
+    expect(
+      rewriteSpawnToolInput(
+        { prompt: "ship it", subagent_type: "implementer", name: "Explore" },
+        { defaultGrunt: true },
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("scrub-spawn-prompt adapter (stdin)", () => {

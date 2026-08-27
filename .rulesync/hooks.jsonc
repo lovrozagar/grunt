@@ -12,15 +12,18 @@
       },
       {
         // Fat Read/Grep/Glob/Bash + Write/Edit scratch rewrite (never deny writes).
-        // Parent-deny stays Grok-only (orchestrate-parent.js).
         "matcher": "Read|read_file|Grep|grep|Glob|list_dir|Bash|run_terminal_command|Write|Edit|write|search_replace",
         "type": "command",
         "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/scripts/gate-fat-tools.mjs\"",
         "timeout": 5
+      },
+      {
+        "matcher": "Write|Edit|write|search_replace|Bash|run_terminal_command|Skill|skill|replace_file_content|run_command",
+        "type": "command",
+        "command": "node \"${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-.}}/.grok/hooks/orchestrate-parent.js\"",
+        "timeout": 5
       }
     ],
-    // Parent Stop + /parent stamp. PreToolUse parent-deny stays Grok-only
-    // (child subagentType/agent_type unverified on these hosts).
     "beforeSubmitPrompt": [
       {
         "type": "command",

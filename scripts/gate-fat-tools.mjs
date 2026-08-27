@@ -79,19 +79,69 @@ export function eventKey(s) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+const CHILD_TYPE_KEYS = [
+  "subagentType",
+  "subagent_type",
+  "agentType",
+  "agent_type",
+  "agentName",
+  "agent_name",
+];
+const CHILD_ID_KEYS = ["agentId", "agent_id", "spawnedBy", "spawned_by"];
+
+function nonEmptyChildId(raw) {
+  if (raw == null) return false;
+  return String(raw).trim() !== "";
+}
+
+/** True when PreToolUse names a child session (UUID ok). Not a fat-gate type. */
+export function hasChildAgentMarker(data) {
+  if (!data || typeof data !== "object") return false;
+  for (const k of CHILD_ID_KEYS) {
+    if (nonEmptyChildId(data[k])) return true;
+  }
+  if (data.agent && typeof data.agent === "object" && !Array.isArray(data.agent)) {
+    for (const k of [...CHILD_ID_KEYS, "id"]) {
+      if (nonEmptyChildId(data.agent[k])) return true;
+    }
+  }
+  return false;
+}
+
+function coerceChildType(raw) {
+  if (raw == null) return "";
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return "";
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  ) {
+    return "";
+  }
+  if (/^[0-9]+$/.test(s)) return "";
+  if (s.length > 64 || /[\/\\]/.test(s)) return "";
+  return s;
+}
+
 export function subagentTypeOf(data) {
   if (!data || typeof data !== "object") return "";
-  const raw =
-    data.subagentType ??
-    data.subagent_type ??
-    data.agentType ??
-    data.agent_type ??
-    "";
-  return String(raw).trim().toLowerCase();
+  for (const k of [...CHILD_TYPE_KEYS, ...CHILD_ID_KEYS]) {
+    const t = coerceChildType(data[k]);
+    if (t) return t;
+  }
+  if (data.agent && typeof data.agent === "object" && !Array.isArray(data.agent)) {
+    for (const k of ["subagentType", "subagent_type", "type", "name", "agentType"]) {
+      const t = coerceChildType(data.agent[k]);
+      if (t) return t;
+    }
+  } else if (typeof data.agent === "string") {
+    const t = coerceChildType(data.agent);
+    if (t) return t;
+  }
+  return "";
 }
 
 export function isParentOrchestrator(data) {
-  return !subagentTypeOf(data);
+  return !subagentTypeOf(data) && !hasChildAgentMarker(data);
 }
 
 export function toolInputOf(data) {

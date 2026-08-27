@@ -123,6 +123,28 @@ export function capSpawnPrompt(prompt) {
   return (again.body + verdictPart).trim();
 }
 
+const SPAWN_TYPE_KEYS = ["subagent_type", "subagentType", "name", "type", "agent"];
+const FORBIDDEN_SPAWN_TYPES = new Set([
+  "explore",
+  "plan",
+  "general-purpose",
+  "orchestrator",
+]);
+
+function spawnTypeCandidate(toolInput) {
+  for (const k of SPAWN_TYPE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(toolInput, k)) continue;
+    if (toolInput[k] == null) continue;
+    const v = String(toolInput[k]).trim();
+    if (!v) continue;
+    const key = v.toLowerCase();
+    if (ALLOWED_TYPES.has(key)) return key;
+    if (FORBIDDEN_SPAWN_TYPES.has(key)) return "";
+    return "";
+  }
+  return "";
+}
+
 export function rewriteSpawnToolInput(toolInput, { defaultGrunt = false } = {}) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     return defaultGrunt ? { subagent_type: "grunt" } : null;
@@ -132,13 +154,13 @@ export function rewriteSpawnToolInput(toolInput, { defaultGrunt = false } = {}) 
   let changed = false;
 
   if (defaultGrunt) {
-    const cur =
-      toolInput.subagent_type != null
-        ? String(toolInput.subagent_type).trim()
-        : toolInput.subagentType != null
-          ? String(toolInput.subagentType).trim()
-          : "";
-    if (!ALLOWED_TYPES.has(cur)) {
+    const cur = spawnTypeCandidate(toolInput);
+    if (ALLOWED_TYPES.has(cur)) {
+      if (String(next.subagent_type || "") !== cur) {
+        next.subagent_type = cur;
+        changed = true;
+      }
+    } else {
       next.subagent_type = "grunt";
       if (Object.prototype.hasOwnProperty.call(toolInput, "subagentType")) {
         next.subagentType = "grunt";

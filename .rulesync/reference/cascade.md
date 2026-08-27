@@ -13,6 +13,7 @@ Always-do lives in orchestrator/overview (do not open this file first). Peek/kil
 Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.
 
 Always spawn + prompt. First token = spawn. No try-then-spawn. No parent probe. No tiny-read/grep/list_dir/bash/grunt-job for the user. No skip-spawn. `/parent` is the only parent-tool escape.
+Create/change product files → first token spawn implementer (thinker then implementer if no spec). Never parent Write/Edit/Bash/Skill-that-writes. Child returned is not terminal if writes remain or spawn count is 0 on a file-change turn. plan/spec ready + writes remain → persist plan if needed; spawn implementer; do not recap-stop. plan-only `/write-plan` → recap + `next: /implement-plan`.
 
 1. Tools (facts / search / exec / git / web / test / low-reason mechanical write) → grunt. Facts/search → grunt, never thinker.
 2. Write defined solution → implementer.
@@ -34,7 +35,7 @@ Classify `done` | `alive` | `stuck` vs prior peek: **done** (completed/failed), 
 Loop until done. No auto-kill. Kill only if the user asks and the host has a kill tool.
 Then print recap as `[orchestrator]: …` (or the child role tag) with real child output. Do not redo the child's work.
 
-Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. First non-empty line must match legal `[orchestrator|grunt|implementer|thinker|handoff]:`. Siblings still run → role tag + echo. In-flight wait recap is `[orchestrator]: wait grunt` only. Or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
+Parent Stop (`MAX_STOP=3`): do not waive fenced/impl finals for `tools-used` stamp. Parent `end_turn` is tagged+one-line or `[orchestrator]: wait grunt`. First non-empty line must match legal `[orchestrator|grunt|implementer|thinker|handoff]:`. Siblings still run → role tag + one-line echo. In-flight wait recap is `[orchestrator]: wait grunt` only. Or consume `parent-escape-{sid}` once. Else block. No `isCheap` / trivia / long definitions.
 `/handoff` is the other in-parent turn: context large + work unfinished → parent writes one `.tmp/grunt/handoffs/` file from its own transcript (no child sees the session), recaps `[handoff]: serial=… path=…`, tells the user to continue in a new session. No spawn, one write, not a mode.
 `/solo` is the session mode (not one-turn): `beforeSubmitPrompt` writes `.tmp/orchestrator-logs/grunt-off-{sid}`, every gate short-circuits while it exists, `/cascade` unlinks it. Everything above resumes next turn. Antigravity: skill-only, no stamp create (see hooks.md). `/parent` is one-turn (not a mode): UserPromptSubmit writes `.tmp/orchestrator-logs/parent-escape-{sid}`; Stop consumes+unlinks once. Next Stop resumes spawn/recap rules. Skills point here; do not paste this file.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Parent-orchestrator gate: spawn/peek/kill/todo + persistPlan/persistHandoff writes.
+/** PreToolUse parent-deny on Claude+Grok+Antigravity; Stop = first-non-empty-line recap; stop-block survives host banners; SubagentStop is single-registration intercept.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
 Stop: first-non-empty-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]: recap
@@ -19,6 +19,7 @@ import {
   fatHookOutput,
   fileSizeBytes,
   isWorkspaceGruntJob,
+  isParentOrchestrator,
   processFatTools,
   resolveReadPath,
   rewriteGruntScratchPath,
@@ -30,20 +31,11 @@ import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
 import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs";
 
-const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
+export const DENY_REASON = "spawn implementer|grunt|thinker";
 export const STOP_REASONS = [
-  "Violation: Stop is not a recap-only wall. XOR one action now. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
-  "Second violation: still no exclusive next action. XOR one. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
-  "Third violation: last check before fail-open. XOR one action. DO NOT stop.\n" +
-    "⚠/validate/sim findings → spawn implementer with them; do not recap; spawn; no parent-edit.\n" +
-    "Else work remains → spawn grunt|implementer|thinker; do not glue done into the tag.\n" +
-    "Else all children returned and no findings → recap `[orchestrator]:` echo.",
+  "Spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
+  "Still spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
+  "Last spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
@@ -59,7 +51,23 @@ const SPAWN_TOOLS = new Set([
   "agent",
   "spawnagent",
 ]);
-const WRITE_TOOLS = new Set(["write"]);
+const WRITE_TOOLS = new Set([
+  "write",
+  "edit",
+  "searchreplace",
+  "replacefilecontent",
+]);
+const BASH_TOOLS = new Set(["bash", "runterminalcommand", "runcommand"]);
+const SKILL_TOOLS = new Set(["skill"]);
+const PARENT_SKILLS = new Set([
+  "parent",
+  "explain",
+  "solo",
+  "cascade",
+  "handoff",
+  "write-plan",
+  "implement-plan",
+]);
 const READ_TOOLS = new Set(["readfile", "read"]);
 const INTERCEPT_JOBS = new Set(["search", "exec"]);
 const MAX_STOP = 3;
@@ -97,7 +105,7 @@ function preToolUse(data) {
   logPreTool(data, toolKey, toolInput);
 
   const sub = subagentTypeOf(data);
-  if (sub) {
+  if (sub || !isParentOrchestrator(data)) {
     const code = emitFat(data);
     return code == null ? 0 : code;
   }
@@ -127,6 +135,14 @@ function preToolUse(data) {
     return parentWrite(data, toolInput);
   }
   if (PARENT_TOOLS.has(toolKey)) {
+    emit({ decision: "allow" });
+    return 0;
+  }
+  if (BASH_TOOLS.has(toolKey) && isAllowedParentGruntJob(bashCommandOf(toolInput), workspaceRootOf(data))) {
+    emit({ decision: "allow" });
+    return 0;
+  }
+  if (SKILL_TOOLS.has(toolKey) && isAllowedParentSkill(toolInput)) {
     emit({ decision: "allow" });
     return 0;
   }
@@ -219,6 +235,40 @@ export function isAllowedParentGruntJob(command, workspaceRoot) {
   return isWorkspaceGruntJob(command, workspaceRoot, ["search", "exec"]);
 }
 
+function bashCommandOf(toolInput) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return "";
+  }
+  return String(toolInput.command ?? toolInput.cmd ?? "");
+}
+
+function skillNameOf(toolInput) {
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
+    return "";
+  }
+  const raw =
+    toolInput.skill ??
+    toolInput.skill_name ??
+    toolInput.skillName ??
+    toolInput.name ??
+    "";
+  const s = String(raw).trim().toLowerCase().replace(/\\/g, "/");
+  const base = s.split("/").pop() || "";
+  return base.replace(/\.md$/, "").replace(/_/g, "-");
+}
+
+export function isAllowedParentSkill(toolInput) {
+  return PARENT_SKILLS.has(skillNameOf(toolInput));
+}
+
+function isHostStopBanner(prompt) {
+  const p = String(prompt || "");
+  if (/^\s*Stop hook feedback:/.test(p)) return true;
+  if (/Blocked by stop hook/.test(p)) return true;
+  if (/task[-_ ]?notification/i.test(p)) return true;
+  return false;
+}
+
 function parentWrite(data, toolInput) {
   if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) {
     emit({ decision: "deny", reason: DENY_REASON });
@@ -235,6 +285,10 @@ function parentWrite(data, toolInput) {
   if (rewritten) rawPath = rewritten;
   const handoff = isUnderHandoffs(rawPath, ws);
   if (!handoff && !isUnderPlans(rawPath, ws)) {
+    if (hasParentEscape(data)) {
+      emit({ decision: "allow" });
+      return 0;
+    }
     emit({ decision: "deny", reason: DENY_REASON });
     return 0;
   }
@@ -298,7 +352,7 @@ function isParentEscapePrompt(prompt) {
 function userPromptSubmit(data) {
   unlinkQuiet(stampPath(data, "tools-used"));
   const prompt = userPromptOf(data);
-  if (!/^\s*Stop hook feedback:/.test(prompt)) {
+  if (!isHostStopBanner(prompt)) {
     unlinkQuiet(stampPath(data, "stop-block"));
   }
   // Sticky: only /solo and /cascade move it. Every other prompt leaves it alone.

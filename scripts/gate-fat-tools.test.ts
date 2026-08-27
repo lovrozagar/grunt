@@ -20,7 +20,9 @@ import {
   bashTargetsDenylist,
   denyResponse,
   hookResponse,
+  hasChildAgentMarker,
   isParentOrchestrator,
+  subagentTypeOf,
   pathIsDenied,
   processFatTools,
   processHookPayload,
@@ -96,6 +98,23 @@ describe("isParentOrchestrator", () => {
     expect(isParentOrchestrator({ subagentType: "implementer" })).toBe(false);
     expect(isParentOrchestrator({ subagent_type: "thinker" })).toBe(false);
     expect(isParentOrchestrator({ agentType: "grunt" })).toBe(false);
+    expect(isParentOrchestrator({ agent_type: "implementer" })).toBe(false);
+    expect(isParentOrchestrator({ agentId: "implementer" })).toBe(false);
+    expect(isParentOrchestrator({ agent_id: "thinker" })).toBe(false);
+    expect(isParentOrchestrator({ spawnedBy: "grunt" })).toBe(false);
+    expect(isParentOrchestrator({ spawned_by: "implementer" })).toBe(false);
+    expect(
+      isParentOrchestrator({
+        agentId: "b2c6f0d4-0000-4000-8000-000000000000",
+      }),
+    ).toBe(false);
+    expect(hasChildAgentMarker({ agentId: "b2c6f0d4-0000-4000-8000-000000000000" })).toBe(
+      true,
+    );
+    expect(hasChildAgentMarker({})).toBe(false);
+    expect(isParentOrchestrator({ agent: { type: "implementer" } })).toBe(false);
+    expect(subagentTypeOf({ agent_id: "implementer" })).toBe("implementer");
+    expect(subagentTypeOf({ agentId: "b2c6f0d4-0000-4000-8000-000000000000" })).toBe("");
   });
 });
 
@@ -423,7 +442,7 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       decision: "deny",
-      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+      reason: "spawn implementer|grunt|thinker",
     });
   });
 
@@ -481,7 +500,7 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       decision: "deny",
-      reason: "parent is orchestrator; spawn grunt|implementer|thinker",
+      reason: "spawn implementer|grunt|thinker",
     });
   });
 });
