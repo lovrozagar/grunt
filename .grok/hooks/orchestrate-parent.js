@@ -32,21 +32,18 @@ import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs
 
 const DENY_REASON = "parent is orchestrator; spawn grunt|implementer|thinker";
 export const STOP_REASONS = [
-  "Violation: parent replied without a recap tag.\n" +
-    "DO NOT stop. Continue IN THIS RESPONSE:\n" +
-    "1. Spawn grunt|implementer|thinker if work remains.\n" +
-    "2. Recap with `[orchestrator]:` or the child role tag (`[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`).\n" +
-    "If every spawned child already returned and the turn is done, recap now.",
-  "Second violation: still no recap tag.\n" +
-    "DO NOT stop. Right now, in this same response:\n" +
-    "1. Spawn grunt|implementer|thinker if needed.\n" +
-    "2. Then recap only with `[orchestrator]:` or the matching child role tag.\n" +
-    "Already done and every child returned? Send that recap immediately.",
-  "Third violation: recap still missing.\n" +
-    "This is the last check before fail-open. DO NOT stop:\n" +
-    "1. Spawn the correct agent for remaining work if needed.\n" +
-    "2. Reply with `[orchestrator]:` or the child role tag only, nothing else.\n" +
-    "Complete with all children returned? Send the recap now.",
+  "Violation: Stop is not a recap-only wall. XOR one action now. DO NOT stop.\n" +
+    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
+  "Second violation: still no exclusive next action. XOR one. DO NOT stop.\n" +
+    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
+  "Third violation: last check before fail-open. XOR one action. DO NOT stop.\n" +
+    "⚠/validate/sim findings → spawn implementer with them; do not recap done; no parent-edit.\n" +
+    "Else work remains → spawn grunt|implementer|thinker; do not recap done.\n" +
+    "Else all children returned and no findings → recap `[orchestrator]:` or `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([

@@ -8,6 +8,10 @@ Shipped protocol: **parent-only spawn**. Only the parent **orchestrator** sessio
 
 ## Parent orchestrator
 
+Always-do lives in orchestrator/overview (do not open this file first). Peek/kill/`need:` stay here as reference.
+⚠ / validate / sim → spawn implementer; not stop.
+Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.
+
 Always spawn + prompt. First token = spawn. No try-then-spawn. No parent probe. No tiny-read/grep/list_dir/bash/grunt-job for the user. No skip-spawn. `/parent` is the only parent-tool escape.
 
 1. Tools (facts / search / exec / git / web / test / low-reason mechanical write) → grunt.
@@ -74,6 +78,6 @@ Fail: first 3 error lines. ≤8 lines. No dumps, recap, HTML, JSON, full logs.
 
 Implementer/thinker: fat dumps via `need:` JSON. Implementer shell via rtk; cat/rg/curl/tests without rtk → fat `need:`.
 
-Child prompt = `You are {agent} subagent.` + task + abs paths + verdicts only.
+Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.
 
 Grok PostToolUse is observe-only. SessionStart stays empty (token baseline). See [hooks](hooks.md).

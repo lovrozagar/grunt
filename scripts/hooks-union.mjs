@@ -47,6 +47,7 @@ export const GIT_HOOKS = [
   "scripts/git-hooks/pre-push",
   "scripts/git-hooks/pre-push.mjs",
 ];
+export const POST_WRITE_MATCHER = "Write|Edit|write|search_replace";
 
 const CAVEAT_BEHIND =
   "NOT ported: PreToolUse check-behind.mjs. Gemini has no confirmed before-tool deny event.";
@@ -180,7 +181,7 @@ function desiredPost(root) {
   const hooks = [];
   if (hasScript(root, "validate.mjs")) hooks.push(hookCmd(VALIDATE));
   if (hasScript(root, "sim.mjs")) hooks.push(hookCmd(SIM));
-  return hooks.length ? [{ matcher: "Write|Edit", hooks }] : null;
+  return hooks.length ? [{ matcher: POST_WRITE_MATCHER, hooks }] : null;
 }
 
 function consumerNamed(root) {
@@ -210,10 +211,10 @@ function consumerNamed(root) {
     timeout: 5,
   };
   if (hasScript(root, "validate.mjs")) {
-    named["validate-artifact"] = { event: "PostToolUse", matcher: ".*", command: VALIDATE };
+    named["validate-artifact"] = { event: "PostToolUse", matcher: POST_WRITE_MATCHER, command: VALIDATE };
   }
   if (hasScript(root, "sim.mjs")) {
-    named["simulate-artifact"] = { event: "PostToolUse", matcher: ".*", command: SIM };
+    named["simulate-artifact"] = { event: "PostToolUse", matcher: POST_WRITE_MATCHER, command: SIM };
   }
   return named;
 }
@@ -262,7 +263,7 @@ function applyAgents(root) {
   }
   const post = desiredPost(root);
   if (post) {
-    rulesync.PostToolUse = [{ matcher: ".*", hooks: post[0].hooks }];
+    rulesync.PostToolUse = [{ matcher: POST_WRITE_MATCHER, hooks: post[0].hooks }];
   }
   const named = presentAutorun(root).length ? consumerNamed(root) : {};
   saveJson(abs, { ...live, ...named, rulesync });

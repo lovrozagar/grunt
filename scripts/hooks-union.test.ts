@@ -8,6 +8,7 @@ import {
   AUTORUN_NEEDLES,
   GRUNT_NEEDLES,
   PLATFORM_DENY,
+  POST_WRITE_MATCHER,
   applyUnion,
   checkUnion,
   parseArgv,
@@ -238,6 +239,18 @@ describe("consumer overlay keep-list re-apply", () => {
     expect(JSON.stringify(next.hooks.PreToolUse)).toMatch(/check-behind/);
     expect(JSON.stringify(next.hooks.PostToolUse)).toMatch(/validate\.mjs/);
     expect(JSON.stringify(next.hooks.PostToolUse)).toMatch(/sim\.mjs/);
+    expect(next.hooks.PostToolUse[0].matcher).toBe(POST_WRITE_MATCHER);
+    expect(JSON.stringify(next.hooks.PostToolUse)).not.toContain('"matcher": ".*"');
+
+    const agents = readJson(ws, ".agents/hooks.json");
+    expect(agents["validate-artifact"].matcher).toBe(POST_WRITE_MATCHER);
+    expect(agents["simulate-artifact"].matcher).toBe(POST_WRITE_MATCHER);
+    expect(agents.rulesync.PostToolUse[0].matcher).toBe(POST_WRITE_MATCHER);
+    expect(JSON.stringify(agents.rulesync.PostToolUse)).not.toContain('"matcher": ".*"');
+    expect(JSON.stringify(agents["validate-artifact"])).not.toContain('"matcher": ".*"');
+    expect(JSON.stringify(agents["simulate-artifact"])).not.toContain('"matcher": ".*"');
+    expect(JSON.stringify(agents.rulesync.Stop ?? agents.rulesync.stop)).toBeUndefined();
+    expect(JSON.stringify(agents.rulesync.PreToolUse)).toMatch(SCRUB);
 
     const gemini = readJson(ws, ".gemini/settings.json");
     expect(gemini.extra).toBe(true);
@@ -245,10 +258,6 @@ describe("consumer overlay keep-list re-apply", () => {
     expect(JSON.stringify(gemini.hooks)).not.toMatch(/check-behind/);
     expect(gemini._caveat_check_behind).toBeTruthy();
     expect(gemini._caveat_permissions).toBeTruthy();
-
-    const agents = readJson(ws, ".agents/hooks.json");
-    expect(JSON.stringify(agents.rulesync.Stop ?? agents.rulesync.stop)).toBeUndefined();
-    expect(JSON.stringify(agents.rulesync.PreToolUse)).toMatch(SCRUB);
 
     const ssot = fs.readFileSync(path.join(ws, ".rulesync/hooks.jsonc"), "utf8");
     expect(ssot).toMatch(/"beforeSubmitPrompt"/);

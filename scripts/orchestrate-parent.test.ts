@@ -348,6 +348,11 @@ describe("orchestrate-parent Stop", () => {
       expect(json.reason.length).toBeLessThan(600);
       expect(json.reason).not.toMatch(/\/handoff/);
       expect(json.reason).not.toMatch(/\[agent\]:/);
+      expect(json.reason).toMatch(/XOR/);
+      expect(json.reason).toMatch(/⚠/);
+      expect(json.reason).toMatch(/validate/);
+      expect(json.reason).toMatch(/sim/);
+      expect(json.reason).toMatch(/spawn implementer/);
       expect(json.reason).toMatch(/\[orchestrator\]:/);
       reasons.push(json.reason);
     }
