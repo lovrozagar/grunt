@@ -65,12 +65,16 @@ function destHasGruntSentinel(dest) {
   })
 }
 
-function destAlreadyInited(dest) {
+export function destAlreadyInited(dest) {
   return (
     fs.existsSync(path.join(dest, "scripts", "telemetry.mjs")) ||
     fs.existsSync(path.join(dest, ".grok", "hooks", "orchestrate-parent.js")) ||
     fs.existsSync(path.join(dest, ".rulesync"))
   )
+}
+
+export function shouldAutoSkipGlobals(dest) {
+  return destHasGruntSentinel(dest) || fs.existsSync(path.join(dest, "scripts", "telemetry.mjs"))
 }
 
 export function mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited = false } = {}) {
@@ -213,63 +217,81 @@ export function mergePackageJson(dest, pkgRoot) {
   fs.writeFileSync(destPath, `${JSON.stringify(destPkg, null, 2)}\n`)
 }
 
-export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileSync, skipGlobals = false } = {}) {
+export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileSync, skipGlobals = false, applyGlobals, onPhase } = {}) {
   dest = path.resolve(dest)
   const pkgRoot = path.resolve(pkgRootOpt ?? PKG_ROOT)
   const alreadyInited = destAlreadyInited(dest)
   const skipGlobalsApply =
-    skipGlobals || destHasGruntSentinel(dest) || fs.existsSync(path.join(dest, "scripts", "telemetry.mjs"))
+    applyGlobals === true ? false : skipGlobals || shouldAutoSkipGlobals(dest)
 
-  for (const dir of COPY_DIRS) {
-    const src = path.join(pkgRoot, dir)
-    const d = path.join(dest, dir)
-    fs.mkdirSync(d, { recursive: true })
-    if (samePath(src, d)) continue
-    if (dir === ".claude") {
-      fs.cpSync(src, d, {
-        recursive: true,
-        force: true,
-        filter: (s) => path.basename(s) !== "settings.json",
-      })
-      mergeClaudeSettings(dest, pkgRoot)
-    } else {
-      fs.cpSync(src, d, { recursive: true, force: true })
+  const phase = (name, fn) => {
+    onPhase?.(name, "start")
+    try {
+      fn()
+    } finally {
+      onPhase?.(name, "stop")
     }
   }
-
-  let skippedSideFile = false
-  for (const file of GUARDED_MD_FILES) {
-    if (mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited }) === "skipped-side-file") {
-      skippedSideFile = true
-    }
-  }
-  if (skippedSideFile) {
-    console.log("AGENTS.md/CLAUDE.md lack markers and were left alone")
-  }
-
-  fs.mkdirSync(path.join(dest, "scripts"), { recursive: true })
-  for (const name of PRODUCT_SCRIPTS) {
-    const src = path.join(pkgRoot, "scripts", name)
-    const d = path.join(dest, "scripts", name)
-    if (samePath(src, d)) continue
-    const st = fs.statSync(src)
-    if (st.isDirectory()) fs.cpSync(src, d, { recursive: true, force: true })
-    else fs.copyFileSync(src, d)
-  }
-
-  fs.mkdirSync(path.join(dest, ".tmp"), { recursive: true })
-  mergeGitignore(dest)
 
   const self = samePath(dest, pkgRoot)
+
+  phase("merge", () => {
+    for (const dir of COPY_DIRS) {
+      const src = path.join(pkgRoot, dir)
+      const d = path.join(dest, dir)
+      fs.mkdirSync(d, { recursive: true })
+      if (samePath(src, d)) continue
+      if (dir === ".claude") {
+        fs.cpSync(src, d, {
+          recursive: true,
+          force: true,
+          filter: (s) => path.basename(s) !== "settings.json",
+        })
+        mergeClaudeSettings(dest, pkgRoot)
+      } else {
+        fs.cpSync(src, d, { recursive: true, force: true })
+      }
+    }
+
+    let skippedSideFile = false
+    for (const file of GUARDED_MD_FILES) {
+      if (mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited }) === "skipped-side-file") {
+        skippedSideFile = true
+      }
+    }
+    if (skippedSideFile) {
+      console.log("AGENTS.md/CLAUDE.md lack markers and were left alone")
+    }
+
+    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true })
+    for (const name of PRODUCT_SCRIPTS) {
+      const src = path.join(pkgRoot, "scripts", name)
+      const d = path.join(dest, "scripts", name)
+      if (samePath(src, d)) continue
+      const st = fs.statSync(src)
+      if (st.isDirectory()) fs.cpSync(src, d, { recursive: true, force: true })
+      else fs.copyFileSync(src, d)
+    }
+
+    fs.mkdirSync(path.join(dest, ".tmp"), { recursive: true })
+    mergeGitignore(dest)
+
+    if (!self) mergePackageJson(dest, pkgRoot)
+  })
+
   // Self-skip: file/dir merge + .tmp + gitignore only. No package.json merge,
   // npm install, or generate/sync/check (would mutate this package in-place).
   if (self) return
 
-  mergePackageJson(dest, pkgRoot)
-  exec("npm", ["install"], { cwd: dest, stdio: "inherit" })
-  exec("npm", ["run", "rulesync:generate"], { cwd: dest, stdio: "inherit" })
-  if (!skipGlobalsApply) {
-    exec("npm", ["run", "sync:globals:apply"], { cwd: dest, stdio: "inherit" })
+  const runNpm = (name, args) => {
+    onPhase?.(name, "start")
+    onPhase?.(name, "stop")
+    exec("npm", args, { cwd: dest, stdio: "inherit" })
   }
-  exec("npm", ["run", "rulesync:check"], { cwd: dest, stdio: "inherit" })
+  runNpm("install", ["install"])
+  runNpm("generate", ["run", "rulesync:generate"])
+  if (!skipGlobalsApply) {
+    runNpm("sync-globals", ["run", "sync:globals:apply"])
+  }
+  runNpm("check", ["run", "rulesync:check"])
 }

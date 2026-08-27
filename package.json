@@ -55,6 +55,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0"
+  },
   "scripts": {
     "rulesync:generate": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && node scripts/hooks-union.mjs",
     "rulesync:watch": "node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills --watch",

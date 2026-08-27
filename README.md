@@ -1,6 +1,6 @@
 # GRUNT
 
-Building Grunt - a multi agent orchestrator workflow
+Building Grunt - a multi agent orchestrator workflow. OSS, general use case, merges with existing configs, drop in any repo to switch from default provider flow to Grunt's
 
 # Install
 
@@ -11,9 +11,11 @@ npm i -D @lovrozagar/grunt
 npx @lovrozagar/grunt
 ```
 
-Same as `npx @lovrozagar/grunt init`. Merge SoT, `npm install`, `rulesync:generate`, `sync:globals:apply`, `rulesync:check`. Do not `npm test` as a consumer.
+TTY no command: menu (init default; generate, check, sync-globals, purge-mcps, doctor, help, quit). Piped/CI/`--yes`/`-y`/`--non-interactive` no command: still `init`. Same as `npx @lovrozagar/grunt init`. Merge SoT, `npm install`, `rulesync:generate`, `sync:globals:apply`, `rulesync:check`. Do not `npm test` as a consumer.
 
 `--skip-globals` skips `sync:globals:apply`. Re-init auto-skips globals when `<!-- grunt:begin -->` is in AGENTS.md/CLAUDE.md or `scripts/telemetry.mjs` exists. First init (no sentinel, no telemetry) still applies globals unless flagged.
+
+`sync-globals` / `purge-mcps`: dry-run default; `--apply` writes. `--yes` is not `--apply`. `sync-globals --host <id>`. `doctor` runs `rulesync doctor`.
 
 Contributors to this repo only: local `npm i && npm test`.
 

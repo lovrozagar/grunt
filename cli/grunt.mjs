@@ -2,38 +2,134 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { init } from "./init.mjs"
+import { destAlreadyInited, init, shouldAutoSkipGlobals } from "./init.mjs"
+import { confirm, isInteractive, select, spinner } from "./prompt.mjs"
 
 const PKG_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 const USAGE = `Usage: grunt [command]
 
-Default (no command): init — full setup
+Default (no command): TTY menu; else init — full setup
 
 Commands:
-  init       Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
-  generate   npm run rulesync:generate
-  check      npm run rulesync:check
-  help       Show this help
-  version    Print package version
+  init          Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
+  generate      npm run rulesync:generate
+  check         npm run rulesync:check
+  sync-globals  npm run sync:globals (dry-run; --apply to write)
+  purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
+  doctor        npm run rulesync:doctor
+  help          Show this help
+  version       Print package version
 
 Flags:
-  --skip-globals  Skip sync:globals:apply (auto-skipped when already initialized)
+  --skip-globals     Skip sync:globals:apply (auto-skipped when already initialized)
+  --yes, -y          Non-interactive (not --apply)
+  --non-interactive  Same as --yes
+  --apply            Write for sync-globals / purge-mcps
+  --host <id>        sync-globals host
 `
+
+const MENU_OPTIONS = [
+  { value: "init", label: "init" },
+  { value: "generate", label: "generate" },
+  { value: "check", label: "check" },
+  { value: "sync-globals", label: "sync-globals" },
+  { value: "purge-mcps", label: "purge-mcps" },
+  { value: "doctor", label: "doctor" },
+  { value: "help", label: "help" },
+  { value: "quit", label: "quit" },
+]
+
+const YES_FLAGS = new Set(["--yes", "-y", "--non-interactive"])
 
 function pkgVersion() {
   const pkg = JSON.parse(readFileSync(path.join(PKG_ROOT, "package.json"), "utf8"))
   return pkg.version
 }
 
-function npmRun(script) {
-  execFileSync("npm", ["run", script], { cwd: process.cwd(), stdio: "inherit" })
+function npmRun(script, extra = []) {
+  const args = extra.length ? ["run", script, "--", ...extra] : ["run", script]
+  execFileSync("npm", args, { cwd: process.cwd(), stdio: "inherit" })
 }
 
-export function start() {
-  const args = process.argv.slice(2)
-  const skipGlobals = args.includes("--skip-globals")
-  const [cmd] = args.filter((a) => a !== "--skip-globals")
+function hostValueOk(v) {
+  return v != null && v !== "" && !String(v).startsWith("-")
+}
+
+export function parseArgv(argv) {
+  let skipGlobals = false
+  let apply = false
+  let host
+  let hostError = false
+  const positionals = []
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === "--skip-globals") {
+      skipGlobals = true
+      continue
+    }
+    if (YES_FLAGS.has(a)) continue
+    if (a === "--apply") {
+      apply = true
+      continue
+    }
+    if (a === "--host") {
+      const v = argv[i + 1]
+      if (!hostValueOk(v)) {
+        hostError = true
+        continue
+      }
+      host = v
+      i += 1
+      continue
+    }
+    if (typeof a === "string" && a.startsWith("--host=")) {
+      host = a.slice("--host=".length)
+      if (!hostValueOk(host)) hostError = true
+      continue
+    }
+    positionals.push(a)
+  }
+  return { cmd: positionals[0], skipGlobals, apply, host, hostError }
+}
+
+function hostExtra(host) {
+  return host ? ["--host", host] : []
+}
+
+function bindSpinner() {
+  const spin = spinner()
+  return (name, action) => {
+    if (action === "start") spin.start(name)
+    else if (action === "stop") spin.stop()
+  }
+}
+
+async function runInit(cwd, { skipGlobals, interactive }) {
+  if (!interactive) {
+    init(cwd, { skipGlobals })
+    return
+  }
+  if (destAlreadyInited(cwd)) {
+    const again = await confirm({
+      message: "Re-init?",
+      initialValue: true,
+    })
+    if (!again) return
+  }
+  const autoSkip = skipGlobals || shouldAutoSkipGlobals(cwd)
+  const applyGlobals = await confirm({
+    message: "Apply globals?",
+    initialValue: !autoSkip,
+  })
+  init(cwd, {
+    skipGlobals: !applyGlobals,
+    applyGlobals,
+    onPhase: bindSpinner(),
+  })
+}
+
+async function dispatch(cmd, flags, interactive) {
   if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     process.stdout.write(USAGE)
     return
@@ -43,7 +139,10 @@ export function start() {
     return
   }
   if (!cmd || cmd === "init") {
-    init(process.cwd(), { skipGlobals })
+    await runInit(process.cwd(), {
+      skipGlobals: flags.skipGlobals,
+      interactive: interactive && (!cmd || cmd === "init"),
+    })
     return
   }
   if (cmd === "generate") {
@@ -54,6 +153,40 @@ export function start() {
     npmRun("rulesync:check")
     return
   }
+  if (cmd === "sync-globals") {
+    const script = flags.apply ? "sync:globals:apply" : "sync:globals"
+    npmRun(script, hostExtra(flags.host))
+    return
+  }
+  if (cmd === "purge-mcps") {
+    npmRun(flags.apply ? "purge:global-mcps:apply" : "purge:global-mcps")
+    return
+  }
+  if (cmd === "doctor") {
+    npmRun("rulesync:doctor")
+    return
+  }
   process.stdout.write(USAGE)
   process.exitCode = 1
+}
+
+export async function start() {
+  const flags = parseArgv(process.argv.slice(2))
+  if (flags.hostError) {
+    process.stdout.write(USAGE)
+    process.exitCode = 1
+    return
+  }
+  const interactive = isInteractive()
+  let cmd = flags.cmd
+  if (!cmd && interactive) {
+    const choice = await select({
+      message: "Command",
+      options: MENU_OPTIONS,
+      initialValue: "init",
+    })
+    if (choice === "quit") return
+    cmd = choice
+  }
+  await dispatch(cmd, flags, interactive)
 }

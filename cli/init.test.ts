@@ -3,12 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  destAlreadyInited,
   init,
   mergeClaudeSettings,
   mergeGitignore,
   mergeGuardedMarkdown,
   mergePackageJson,
   samePath,
+  shouldAutoSkipGlobals,
 } from "./init.mjs";
 
 const tmpDirs: string[] = [];
@@ -732,6 +734,21 @@ describe("init", () => {
     ]);
   });
 
+  it("applyGlobals true still applies when telemetry auto-skip would fire", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-force-globals-");
+    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
+    const exec = vi.fn();
+    init(dest, { pkgRoot, execFileSync: exec, applyGlobals: true });
+    expect(exec.mock.calls.map((c) => c[1])).toEqual([
+      ["install"],
+      ["run", "rulesync:generate"],
+      ["run", "sync:globals:apply"],
+      ["run", "rulesync:check"],
+    ]);
+  });
+
   it("auto-skip globals when telemetry.mjs exists", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("grunt-auto-tel-");
@@ -800,4 +817,65 @@ describe("init", () => {
     ]);
     logSpy.mockRestore();
   });
+
+  it("onPhase merge then npm phases stop before exec", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-onphase-");
+    const exec = vi.fn();
+    const onPhase = vi.fn();
+    init(dest, { pkgRoot, execFileSync: exec, onPhase });
+    expect(onPhase.mock.calls).toEqual([
+      ["merge", "start"],
+      ["merge", "stop"],
+      ["install", "start"],
+      ["install", "stop"],
+      ["generate", "start"],
+      ["generate", "stop"],
+      ["sync-globals", "start"],
+      ["sync-globals", "stop"],
+      ["check", "start"],
+      ["check", "stop"],
+    ]);
+    expect(exec.mock.calls.map((c) => c[1])).toEqual([
+      ["install"],
+      ["run", "rulesync:generate"],
+      ["run", "sync:globals:apply"],
+      ["run", "rulesync:check"],
+    ]);
+  });
+
+  it("self-skip only merge onPhase", () => {
+    const pkgRoot = stubPkgRoot();
+    const onPhase = vi.fn();
+    init(pkgRoot, { pkgRoot, onPhase });
+    expect(onPhase.mock.calls).toEqual([
+      ["merge", "start"],
+      ["merge", "stop"],
+    ]);
+  });
 });
+
+describe("destAlreadyInited / shouldAutoSkipGlobals", () => {
+  it("empty dest is neither", () => {
+    const dest = tmp("inspect-empty-");
+    expect(destAlreadyInited(dest)).toBe(false);
+    expect(shouldAutoSkipGlobals(dest)).toBe(false);
+  });
+
+  it(".rulesync means inited, not auto-skip", () => {
+    const dest = tmp("inspect-rulesync-");
+    fs.mkdirSync(path.join(dest, ".rulesync"));
+    expect(destAlreadyInited(dest)).toBe(true);
+    expect(shouldAutoSkipGlobals(dest)).toBe(false);
+  });
+
+  it("sentinel auto-skips globals", () => {
+    const dest = tmp("inspect-sent-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nx\n<!-- grunt:end -->\n",
+    );
+    expect(shouldAutoSkipGlobals(dest)).toBe(true);
+  });
+});
+

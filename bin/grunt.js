@@ -1,4 +1,6 @@
 #!/usr/bin/env node
 import { start } from "../cli/grunt.mjs"
 
-start()
+start().catch(() => {
+  process.exit(1)
+})

@@ -4,26 +4,49 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const init = vi.hoisted(() => vi.fn());
+const destAlreadyInited = vi.hoisted(() => vi.fn(() => false));
+const shouldAutoSkipGlobals = vi.hoisted(() => vi.fn(() => false));
 const execFileSync = vi.hoisted(() => vi.fn());
+const isInteractive = vi.hoisted(() => vi.fn(() => false));
+const select = vi.hoisted(() => vi.fn());
+const confirm = vi.hoisted(() => vi.fn());
+const spinner = vi.hoisted(() =>
+  vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+);
+const bailIfCancel = vi.hoisted(() => vi.fn((v) => v));
 
-vi.mock("./init.mjs", () => ({ init }));
+vi.mock("./init.mjs", () => ({ init, destAlreadyInited, shouldAutoSkipGlobals }));
 vi.mock("node:child_process", () => ({ execFileSync }));
+vi.mock("./prompt.mjs", () => ({
+  isInteractive,
+  select,
+  confirm,
+  spinner,
+  bailIfCancel,
+}));
 
-import { start } from "./grunt.mjs";
+import { parseArgv, start } from "./grunt.mjs";
 
 const USAGE = `Usage: grunt [command]
 
-Default (no command): init — full setup
+Default (no command): TTY menu; else init — full setup
 
 Commands:
-  init       Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
-  generate   npm run rulesync:generate
-  check      npm run rulesync:check
-  help       Show this help
-  version    Print package version
+  init          Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
+  generate      npm run rulesync:generate
+  check         npm run rulesync:check
+  sync-globals  npm run sync:globals (dry-run; --apply to write)
+  purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
+  doctor        npm run rulesync:doctor
+  help          Show this help
+  version       Print package version
 
 Flags:
-  --skip-globals  Skip sync:globals:apply (auto-skipped when already initialized)
+  --skip-globals     Skip sync:globals:apply (auto-skipped when already initialized)
+  --yes, -y          Non-interactive (not --apply)
+  --non-interactive  Same as --yes
+  --apply            Write for sync-globals / purge-mcps
+  --host <id>        sync-globals host
 `;
 
 const pkgRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -48,7 +71,19 @@ describe("start", () => {
       return true;
     }) as typeof process.stdout.write;
     init.mockReset();
+    destAlreadyInited.mockReset();
+    destAlreadyInited.mockReturnValue(false);
+    shouldAutoSkipGlobals.mockReset();
+    shouldAutoSkipGlobals.mockReturnValue(false);
     execFileSync.mockReset();
+    isInteractive.mockReset();
+    isInteractive.mockReturnValue(false);
+    select.mockReset();
+    confirm.mockReset();
+    spinner.mockReset();
+    spinner.mockImplementation(() => ({ start: vi.fn(), stop: vi.fn() }));
+    bailIfCancel.mockReset();
+    bailIfCancel.mockImplementation((v) => v);
   });
 
   afterEach(() => {
@@ -57,33 +92,35 @@ describe("start", () => {
     process.stdout.write = stdoutWrite;
   });
 
-  it.each(["help", "--help", "-h"])("%s writes usage", (cmd) => {
+  it.each(["help", "--help", "-h"])("%s writes usage", async (cmd) => {
     process.argv = ["node", "grunt", cmd];
-    start();
+    await start();
     expect(chunks.join("")).toBe(USAGE);
     expect(process.exitCode).toBe(0);
     expect(init).not.toHaveBeenCalled();
     expect(execFileSync).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
   });
 
-  it.each(["version", "--version", "-v"])("%s writes package version", (cmd) => {
+  it.each(["version", "--version", "-v"])("%s writes package version", async (cmd) => {
     process.argv = ["node", "grunt", cmd];
-    start();
+    await start();
     expect(chunks.join("")).toBe(`${version}\n`);
     expect(process.exitCode).toBe(0);
   });
 
-  it("no-arg runs init on cwd", () => {
+  it("no-arg runs init on cwd", async () => {
     process.argv = ["node", "grunt"];
-    start();
+    await start();
     expect(init).toHaveBeenCalledOnce();
     expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: false });
     expect(execFileSync).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
   });
 
-  it("init runs init on cwd", () => {
+  it("init runs init on cwd", async () => {
     process.argv = ["node", "grunt", "init"];
-    start();
+    await start();
     expect(init).toHaveBeenCalledOnce();
     expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: false });
   });
@@ -92,16 +129,28 @@ describe("start", () => {
     ["node", "grunt", "--skip-globals"],
     ["node", "grunt", "init", "--skip-globals"],
     ["node", "grunt", "--skip-globals", "init"],
-  ])("passes skipGlobals when argv is %s", (...argv) => {
+  ])("passes skipGlobals when argv is %s", async (...argv) => {
     process.argv = argv;
-    start();
+    await start();
     expect(init).toHaveBeenCalledOnce();
     expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: true });
   });
 
-  it("generate npm-runs rulesync:generate", () => {
+  it.each(["--yes", "-y", "--non-interactive"])(
+    "%s no-arg still init, no menu",
+    async (flag) => {
+      process.argv = ["node", "grunt", flag];
+      await start();
+      expect(isInteractive).toHaveBeenCalledOnce();
+      expect(select).not.toHaveBeenCalled();
+      expect(init).toHaveBeenCalledOnce();
+      expect(init).toHaveBeenCalledWith(process.cwd(), { skipGlobals: false });
+    },
+  );
+
+  it("generate npm-runs rulesync:generate", async () => {
     process.argv = ["node", "grunt", "generate"];
-    start();
+    await start();
     expect(execFileSync).toHaveBeenCalledOnce();
     expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:generate"], {
       cwd: process.cwd(),
@@ -110,9 +159,9 @@ describe("start", () => {
     expect(init).not.toHaveBeenCalled();
   });
 
-  it("check npm-runs rulesync:check", () => {
+  it("check npm-runs rulesync:check", async () => {
     process.argv = ["node", "grunt", "check"];
-    start();
+    await start();
     expect(execFileSync).toHaveBeenCalledOnce();
     expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:check"], {
       cwd: process.cwd(),
@@ -120,12 +169,242 @@ describe("start", () => {
     });
   });
 
-  it("unknown writes usage and exitCode 1", () => {
+  it("sync-globals dry-run default; --yes is not apply", async () => {
+    process.argv = ["node", "grunt", "sync-globals", "--yes"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledOnce();
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "sync:globals"], {
+      cwd: process.cwd(),
+      stdio: "inherit",
+    });
+  });
+
+  it("sync-globals --host grok last pair passes host", async () => {
+    process.argv = ["node", "grunt", "sync-globals", "--host", "grok"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith(
+      "npm",
+      ["run", "sync:globals", "--", "--host", "grok"],
+      { cwd: process.cwd(), stdio: "inherit" },
+    );
+  });
+
+  it("sync-globals --apply --host passes extra args", async () => {
+    process.argv = ["node", "grunt", "sync-globals", "--apply", "--host", "grok"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith(
+      "npm",
+      ["run", "sync:globals:apply", "--", "--host", "grok"],
+      { cwd: process.cwd(), stdio: "inherit" },
+    );
+  });
+
+  it("sync-globals --host last without id: usage exit 1", async () => {
+    process.argv = ["node", "grunt", "sync-globals", "--host"];
+    await start();
+    expect(chunks.join("")).toBe(USAGE);
+    expect(process.exitCode).toBe(1);
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it("sync-globals --host=claude dry-run", async () => {
+    process.argv = ["node", "grunt", "sync-globals", "--host=claude"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith(
+      "npm",
+      ["run", "sync:globals", "--", "--host", "claude"],
+      { cwd: process.cwd(), stdio: "inherit" },
+    );
+  });
+
+  it("purge-mcps dry-run default", async () => {
+    process.argv = ["node", "grunt", "purge-mcps"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "purge:global-mcps"], {
+      cwd: process.cwd(),
+      stdio: "inherit",
+    });
+  });
+
+  it("purge-mcps --apply", async () => {
+    process.argv = ["node", "grunt", "--apply", "purge-mcps"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith(
+      "npm",
+      ["run", "purge:global-mcps:apply"],
+      { cwd: process.cwd(), stdio: "inherit" },
+    );
+  });
+
+  it("doctor npm-runs rulesync:doctor", async () => {
+    process.argv = ["node", "grunt", "doctor"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:doctor"], {
+      cwd: process.cwd(),
+      stdio: "inherit",
+    });
+  });
+
+  it("unknown writes usage and exitCode 1", async () => {
     process.argv = ["node", "grunt", "nope"];
-    start();
+    await start();
     expect(chunks.join("")).toBe(USAGE);
     expect(process.exitCode).toBe(1);
     expect(init).not.toHaveBeenCalled();
     expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it("TTY no cmd shows menu default init", async () => {
+    isInteractive.mockReturnValue(true);
+    select.mockResolvedValue("init");
+    confirm.mockResolvedValue(true);
+    process.argv = ["node", "grunt"];
+    await start();
+    expect(select).toHaveBeenCalledOnce();
+    const opts = select.mock.calls[0][0] as {
+      initialValue: string;
+      options: { value: string }[];
+    };
+    expect(opts.initialValue).toBe("init");
+    expect(opts.options.map((o) => o.value)).toEqual([
+      "init",
+      "generate",
+      "check",
+      "sync-globals",
+      "purge-mcps",
+      "doctor",
+      "help",
+      "quit",
+    ]);
+    expect(init).toHaveBeenCalled();
+    expect(isInteractive).toHaveBeenCalledOnce();
+  });
+
+  it("TTY menu generate", async () => {
+    isInteractive.mockReturnValue(true);
+    select.mockResolvedValue("generate");
+    process.argv = ["node", "grunt"];
+    await start();
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:generate"], {
+      cwd: process.cwd(),
+      stdio: "inherit",
+    });
+  });
+
+  it("TTY menu help writes usage", async () => {
+    isInteractive.mockReturnValue(true);
+    select.mockResolvedValue("help");
+    process.argv = ["node", "grunt"];
+    await start();
+    expect(chunks.join("")).toBe(USAGE);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("TTY menu quit does nothing", async () => {
+    isInteractive.mockReturnValue(true);
+    select.mockResolvedValue("quit");
+    process.argv = ["node", "grunt"];
+    await start();
+    expect(init).not.toHaveBeenCalled();
+    expect(execFileSync).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("TTY cancel exits 0", async () => {
+    isInteractive.mockReturnValue(true);
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("EXIT");
+    }) as typeof process.exit);
+    select.mockImplementation(async () => {
+      process.exit(0);
+    });
+    process.argv = ["node", "grunt"];
+    await expect(start()).rejects.toThrow("EXIT");
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(init).not.toHaveBeenCalled();
+    exit.mockRestore();
+  });
+
+  it("TTY init already-inited decline skips init", async () => {
+    isInteractive.mockReturnValue(true);
+    destAlreadyInited.mockReturnValue(true);
+    confirm.mockResolvedValue(false);
+    process.argv = ["node", "grunt", "init"];
+    await start();
+    expect(confirm).toHaveBeenCalled();
+    expect(init).not.toHaveBeenCalled();
+  });
+
+  it("TTY init confirms globals; spinner onPhase stop before inherit", async () => {
+    isInteractive.mockReturnValue(true);
+    shouldAutoSkipGlobals.mockReturnValue(true);
+    const spin = { start: vi.fn(), stop: vi.fn() };
+    spinner.mockReturnValue(spin);
+    confirm.mockResolvedValue(true);
+    init.mockImplementation((_dest: string, opts: { onPhase?: (n: string, a: string) => void }) => {
+      opts.onPhase?.("merge", "start");
+      opts.onPhase?.("merge", "stop");
+      opts.onPhase?.("install", "start");
+      opts.onPhase?.("install", "stop");
+    });
+    process.argv = ["node", "grunt", "init"];
+    await start();
+    expect(confirm).toHaveBeenCalled();
+    const globalsConfirm = confirm.mock.calls.find(
+      (c) => String((c[0] as { message?: string }).message).includes("globals"),
+    );
+    expect(globalsConfirm?.[0]).toMatchObject({ initialValue: false });
+    expect(init).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        skipGlobals: false,
+        applyGlobals: true,
+        onPhase: expect.any(Function),
+      }),
+    );
+    expect(isInteractive).toHaveBeenCalledOnce();
+    expect(spin.start).toHaveBeenCalledWith("merge");
+    expect(spin.stop).toHaveBeenCalled();
+    expect(spin.start).toHaveBeenCalledWith("install");
+  });
+
+  it("TTY init --skip-globals default confirm false maps to skip", async () => {
+    isInteractive.mockReturnValue(true);
+    confirm.mockResolvedValue(false);
+    process.argv = ["node", "grunt", "init", "--skip-globals"];
+    await start();
+    expect(init).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        skipGlobals: true,
+        applyGlobals: false,
+        onPhase: expect.any(Function),
+      }),
+    );
+    expect(isInteractive).toHaveBeenCalledOnce();
+  });
+});
+
+describe("parseArgv --host", () => {
+  it("last flag pair --host <id>", () => {
+    expect(parseArgv(["sync-globals", "--host", "grok"])).toMatchObject({
+      cmd: "sync-globals",
+      host: "grok",
+      hostError: false,
+    });
+  });
+
+  it("--host last without id is hostError", () => {
+    expect(parseArgv(["sync-globals", "--host"])).toMatchObject({ hostError: true });
+  });
+
+  it("--host= empty is hostError", () => {
+    expect(parseArgv(["sync-globals", "--host="])).toMatchObject({ hostError: true });
+  });
+
+  it("--host followed by flag is hostError", () => {
+    expect(parseArgv(["sync-globals", "--host", "--apply"])).toMatchObject({
+      hostError: true,
+    });
   });
 });
