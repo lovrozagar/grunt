@@ -510,7 +510,20 @@ function loadInProgressPlans(workspaceRoot) {
   return out;
 }
 
-function implementerWriteDeny(input, workspaceRoot) {
+function specTextOf(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "";
+  const parts = [];
+  for (const k of ["prompt", "userPrompt", "user_prompt", "content"]) {
+    if (typeof data[k] === "string" && data[k]) parts.push(data[k]);
+  }
+  const agent = data.agent;
+  if (agent && typeof agent === "object" && !Array.isArray(agent)) {
+    if (typeof agent.prompt === "string" && agent.prompt) parts.push(agent.prompt);
+  }
+  return parts.join("\n");
+}
+
+function implementerWriteDeny(input, workspaceRoot, data) {
   const ws = path.resolve(workspaceRoot);
   const plans = loadInProgressPlans(ws);
   const allow = new Set();
@@ -520,14 +533,16 @@ function implementerWriteDeny(input, workspaceRoot) {
       allow.add(extracted);
     }
   }
-  const hasInProgress = plans.length > 0;
+  const promptPaths = extractPlanPaths(specTextOf(data), ws);
+  for (const abs of promptPaths) allow.add(abs);
+  const restrictive = promptPaths.size > 0;
   for (const key of WRITE_PATH_FIELDS) {
     if (typeof input[key] !== "string" || !input[key]) continue;
     const abs = resolveWriteAbs(input[key], ws);
     if (!abs) continue;
     if (isUnderPlansDir(abs, ws)) continue;
     if (allow.has(abs)) continue;
-    if (isUnsolicitedDocPath(abs) || hasInProgress) {
+    if (isUnsolicitedDocPath(abs) || restrictive) {
       return { type: "deny", reason: REASON_IMPLEMENTER_WRITE };
     }
   }
@@ -556,7 +571,7 @@ export function processFatTools(data) {
       }
     }
     if (subagentTypeOf(data) === "implementer") {
-      const denied = implementerWriteDeny(next, ws);
+      const denied = implementerWriteDeny(next, ws, data);
       if (denied) return denied;
     }
     return changed ? { type: "rewrite", updatedInput: next } : null;

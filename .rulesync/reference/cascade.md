@@ -13,7 +13,7 @@ Always-do lives in orchestrator/overview (do not open this file first). Peek/kil
 Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.
 
 Always spawn + prompt. First token = spawn. Parent Read/Bash deny expected if forgotten. Only `/solo` (session stamp) escapes spawn workflow. `/parent` is last-ditch hook stamp not skill-instructed Read/Bash. No try-then-spawn. No parent probe. No tiny-read/grep/list_dir/bash/grunt-job for the user. No skip-spawn.
-Create/change product files → first token spawn implementer (thinker then implementer if no spec). Never parent Write/Edit/Bash/Skill-that-writes. Child returned is not terminal if writes remain or spawn count is 0 on a file-change turn. plan/spec ready + writes remain → persist plan if needed; spawn implementer; do not recap-stop. plan-only `/write-plan` → recap + `next: /implement-plan`.
+Create/change product files → first token spawn implementer if small/simple or prompt-is-spec. Large/complex + no spec → thinker then implementer. Never parent Write/Edit/Bash/Skill-that-writes. Child returned is not terminal if writes remain or spawn count is 0 on a file-change turn. plan/spec ready + writes remain → persist plan if needed; spawn implementer; do not recap-stop. plan-only `/write-plan` → recap + `next: /implement-plan`.
 
 1. Tools (facts / search / exec / git / web / test / low-reason mechanical write) → grunt. Facts/search → grunt, never thinker.
 2. Write defined solution → implementer.

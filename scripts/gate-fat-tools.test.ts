@@ -571,7 +571,7 @@ https://example.com/README.md
     return planPath;
   }
 
-  it("allows listed src and plan path; denies README/docs/examples/unlisted", () => {
+  it("allows listed src and plan path; denies README/docs/examples; allows unlisted src", () => {
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), "gate-impl-write-"));
     tmpDirs.push(ws);
     const listed = path.join(ws, "src", "listed.ts");
@@ -622,9 +622,45 @@ https://example.com/README.md
         subagentType: "implementer",
         workspaceRoot: ws,
         toolName: "Write",
+        toolInput: { file_path: path.join(ws, "src/other.ts"), content: "ok" },
+      }),
+    ).toBeNull();
+  });
+
+  it("prompt-listed path allowed despite in-progress plan; prompt exclusive denies unlisted", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "gate-impl-prompt-"));
+    tmpDirs.push(ws);
+    writePlan(ws, "in-progress", path.join(ws, "src", "listed.ts"));
+    const promptPath = path.join(ws, "scripts", "gate-fat-tools.mjs");
+    const deny = { type: "deny" as const, reason: REASON_IMPLEMENTER_WRITE };
+    const prompt = "Fix `" + promptPath + "`";
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        prompt,
+        toolName: "Write",
+        toolInput: { file_path: promptPath, content: "ok" },
+      }),
+    ).toBeNull();
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        prompt,
+        toolName: "Write",
         toolInput: { file_path: path.join(ws, "src/other.ts"), content: "no" },
       }),
     ).toEqual(deny);
+    expect(
+      processFatTools({
+        subagentType: "implementer",
+        workspaceRoot: ws,
+        userPrompt: "touch `" + path.join(ws, "README.md") + "`",
+        toolName: "Write",
+        toolInput: { file_path: path.join(ws, "README.md"), content: "ok" },
+      }),
+    ).toBeNull();
   });
 
   it("with no in-progress plan denies README.md and allows unlisted src", () => {

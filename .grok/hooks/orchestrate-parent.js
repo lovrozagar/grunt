@@ -34,9 +34,9 @@ import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs
 export const DENY_REASON =
   "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
-  "Spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
-  "Still spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
-  "Last spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
+  "Spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
+  "Still spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
+  "Last spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([

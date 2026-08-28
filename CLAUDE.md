@@ -6,7 +6,7 @@ Always-do:
 
 | signal | next |
 |---|---|
-| create/change product files | spawn implementer (thinker then implementer if no spec). Never parent Write/Bash/Skill |
+| create/change product files | small/simple or prompt-is-spec → implementer; large/complex + no spec → thinker then implementer. Never parent Write/Bash/Skill |
 | plan/spec ready + file writes remain | persist plan if needed; spawn implementer; do not recap-stop |
 | tools/facts/git/test/mechanical write | spawn grunt |
 | world fact | spawn grunt `job:web` |
