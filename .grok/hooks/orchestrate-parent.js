@@ -31,7 +31,8 @@ import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
 import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs";
 
-export const DENY_REASON = "spawn implementer|grunt|thinker";
+export const DENY_REASON =
+  "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
   "Spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",
   "Still spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec → thinker. Else recap `[orchestrator]:` one-line.",

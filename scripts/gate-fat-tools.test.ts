@@ -28,6 +28,7 @@ import {
   processHookPayload,
   rewriteGruntScratchPath,
 } from "./gate-fat-tools.mjs";
+import { DENY_REASON } from "../.grok/hooks/orchestrate-parent.js";
 import { ORCHESTRATOR_LOGS_DIR } from "./telemetry.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -442,7 +443,7 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
   });
 
@@ -500,7 +501,7 @@ describe("orchestrate-parent fat tools (Grok SSOT)", () => {
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
   });
 });

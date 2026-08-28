@@ -12,7 +12,7 @@ argument-hint: "<task or context>"
 
 # write-plan
 
-Parent orchestrates thinker then persists via Write under `.tmp/plans/`. Parent does not author the plan body. Format: `../shared/plan-format.md` — read it; do not paste.
+Parent orchestrates thinker then persists via Write under `.tmp/plans/`. Parent does not author the plan body.
 
 ## Invocation
 
@@ -24,22 +24,18 @@ Optional todos: `think` → `write` → `report`. Always a new serial.
 
 Empty `$ARGUMENTS` **and** no task in conversation → `need task` and stop. Do not list the repo.
 
-## Read format
-
-`read_file` `{repo}/.grok/skills/shared/plan-format.md` (`dirname(SKILL.md)/../shared/plan-format.md`).
-
-Gather the listed plan-format/SSOT absolute paths before the up-spawn. Prefetch search|exec via parent `node scripts/grunt-job.mjs` (not LLM grunt spawn). Do not `need:` for paths already listed.
-
 ## Step 1 — thinker
 
 Spawn `subagent_type: thinker`, `background: true`, omit `model`, `description: "write plan"`.
+
+Pass `{abs}/.grok/skills/shared/plan-format.md` in the thinker prompt. If prefetch needed: spawn grunt `job:search|exec` not parent Bash.
 
 Prompt:
 
 ```
 You are thinker subagent. Read-only. Do not write files. Do not spawn.
 
-Named-file Read of listed abs paths only; investigate/search/trees → `need:` (parent prefetch still allowed).
+Named-file Read of listed abs paths only; investigate/search/trees → `need:` (parent spawns grunt prefetch).
 
 Read {abs}/.grok/skills/shared/plan-format.md. Produce a plan that matches it.
 

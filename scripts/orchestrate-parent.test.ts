@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DENY_REASON,
   STOP_REASONS,
   isAllowedParentGruntJob,
 } from "../.grok/hooks/orchestrate-parent.js";
@@ -150,7 +151,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[handoff]: serial=1 path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md\nnext: start a new session; first action = read that path\n",
+          "[handoff]: serial=1 path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md\nnext: start a new session; first action = spawn grunt|implementer with abs path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md\n",
         workspaceRoot: ws,
         sessionId: "s-handoff",
       },
@@ -436,9 +437,94 @@ describe("orchestrate-parent Stop", () => {
       STOP_REASONS.join("\n"),
       ...files.map((f) => fs.readFileSync(f, "utf8")),
     ].join("\n");
-    expect(text).not.toMatch(/Illegal:/);
+    expect(text).not.toMatch(/Illegal:.*\[grunt done\]/);
     expect(text).not.toMatch(/\[grunt done\]/);
     expect(text).not.toMatch(/\[\[agent\] done\]/);
+    const recapSsot = [
+      STOP_REASONS.join("\n"),
+      fs.readFileSync(path.join(root, ".rulesync/reference/cascade.md"), "utf8"),
+      fs.readFileSync(path.join(root, ".rulesync/reference/hooks.md"), "utf8"),
+    ].join("\n");
+    expect(recapSsot).not.toMatch(/Illegal:/);
+  });
+
+  function fmTools(text: string): string[] {
+    const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!m) return [];
+    const fm = m[1];
+    const yamlList = fm.match(/^tools:\r?\n((?:[ \t]*-[ \t]+\S+\r?\n?)+)/m);
+    if (yamlList) {
+      return [...yamlList[1].matchAll(/-[ \t]+(\S+)/g)].map((x) => x[1]);
+    }
+    const inline = fm.match(/^tools:\s*\[([^\]]*)\]/m);
+    if (inline) {
+      return inline[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    const csv = fm.match(/^tools:\s*(.+)$/m);
+    if (!csv) return [];
+    return csv[1]
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  const FIRST_TOKEN =
+    "You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry.";
+
+  it("orchestrator host YAML is spawn/write/todo/peek allowlist only", () => {
+    const claude = fs.readFileSync(
+      path.join(root, ".claude/agents/orchestrator.md"),
+      "utf8",
+    );
+    expect(fmTools(claude)).toEqual(["Write", "Agent"]);
+    expect(claude).not.toMatch(/^- (Read|Grep|Glob|Bash)$/m);
+
+    const grok = fs.readFileSync(path.join(root, ".grok/agents/orchestrator.md"), "utf8");
+    const grokTools = fmTools(grok);
+    expect(grokTools).toEqual([
+      "spawn_subagent",
+      "write",
+      "todo_write",
+      "get_command_or_subagent_output",
+      "kill_command_or_subagent",
+    ]);
+    for (const banned of ["read_file", "grep", "list_dir", "run_terminal_command"]) {
+      expect(grokTools).not.toContain(banned);
+    }
+
+    const ag = fs.readFileSync(path.join(root, ".agents/agents/orchestrator.md"), "utf8");
+    const agTools = fmTools(ag);
+    for (const banned of ["view_file", "grep_search", "run_command"]) {
+      expect(agTools).not.toContain(banned);
+    }
+  });
+
+  it("parent prompts drop deny-expected-if-forgotten; keep first-token + screenshot explain", () => {
+    for (const rel of [
+      ".rulesync/subagents/orchestrator.md",
+      ".rulesync/rules/overview.md",
+      ".rulesync/rules/CLAUDE.md",
+    ]) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(text).toContain(FIRST_TOKEN);
+      expect(text).not.toMatch(/deny expected if forgotten/);
+      expect(text).toMatch(
+        /`\/explain` \| spawn if facts\/work; then human recap of child output; screenshot\/visible=context no Read/,
+      );
+    }
+    const explain = fs.readFileSync(
+      path.join(root, ".rulesync/skills/explain/SKILL.md"),
+      "utf8",
+    );
+    expect(explain).toMatch(
+      /First action = spawn grunt\|implementer\|thinker\s+if facts\/work/,
+    );
+    expect(explain).not.toMatch(/Deny `First action=spawn/);
+    expect(explain).toMatch(/Screenshot\/image is already in the prompt/);
+    expect(explain).not.toMatch(/if you Read first/);
   });
 
   it("Stop hook feedback does not unlink stop-block; normal prompt does", () => {
@@ -628,6 +714,10 @@ describe("orchestrate-parent Stop", () => {
     );
     expect(ssot).toMatch(/\/parent/);
     expect(ssot).toMatch(/parent-escape-\{sid\}/);
+    expect(ssot).toMatch(/Never parent Read\/Bash/);
+    expect(ssot).toMatch(/last-ditch/);
+    expect(ssot).not.toMatch(/must complete in-parent/);
+    expect(ssot).not.toMatch(/parent may finish in-session/);
     expect(grok).toBe(ssot);
   });
 
@@ -980,7 +1070,7 @@ describe("orchestrate-parent parent write", () => {
     );
     expect(JSON.parse(result.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
   });
 
@@ -1069,7 +1159,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
     const denied = runHook(lsPayload, env);
     expect(JSON.parse(denied.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
     const submit = runHook(
       {
@@ -1104,7 +1194,7 @@ describe("orchestrate-parent parent grunt-job bash", () => {
     );
     expect(JSON.parse(ls.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
     const web = runHook(
       {
@@ -1795,7 +1885,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
       );
       expect(JSON.parse(denied.stdout)).toMatchObject({
         decision: "deny",
-        reason: "spawn implementer|grunt|thinker",
+        reason: DENY_REASON,
       });
     }
     runHook(
@@ -1848,7 +1938,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     );
     expect(JSON.parse(again.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
   });
 
@@ -1897,7 +1987,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     });
     expect(JSON.parse(parent.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
   });
 
@@ -1910,7 +2000,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     });
     expect(JSON.parse(edit.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
     const bash = pre(ws, {
       toolName: "Bash",
@@ -1918,7 +2008,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     });
     expect(JSON.parse(bash.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
     const skill = pre(ws, {
       toolName: "Skill",
@@ -1926,13 +2016,20 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     });
     expect(JSON.parse(skill.stdout)).toMatchObject({
       decision: "deny",
-      reason: "spawn implementer|grunt|thinker",
+      reason: DENY_REASON,
     });
     const writePlan = pre(ws, {
       toolName: "Skill",
       toolInput: { skill: "write-plan" },
     });
     expect(JSON.parse(writePlan.stdout)).toMatchObject({ decision: "allow" });
+    for (const skill of ["explain", "parent"]) {
+      const allowed = pre(ws, {
+        toolName: "Skill",
+        toolInput: { skill },
+      });
+      expect(JSON.parse(allowed.stdout)).toMatchObject({ decision: "allow" });
+    }
     const gj = pre(ws, {
       toolName: "Bash",
       toolInput: {
@@ -1966,6 +2063,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     expect(pre).toMatch(/Write/);
     expect(pre).toMatch(/Bash/);
     expect(pre).toMatch(/Skill/);
+    expect(pre).toMatch(/Read\|read_file\|Grep\|grep\|Glob\|list_dir/);
     const sub = settings.hooks?.SubagentStop ?? [];
     const cmds = JSON.stringify(sub).match(/orchestrate-parent\.js/g) || [];
     expect(cmds.length).toBe(1);
@@ -1976,5 +2074,164 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
       /orchestrate-parent/i.test(k),
     );
     expect(named).toEqual([]);
+  });
+
+  it("DENY_REASON is spawn-first + deny-expected + /solo only", () => {
+    expect(DENY_REASON).toBe(
+      "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.",
+    );
+  });
+
+  it("denies parent read_file/Read unless solo or parent-escape", () => {
+    const ws = workspace();
+    const sid = "deny-read";
+    const env = { GROK_SESSION_ID: sid };
+    const filePath = path.join(ws, "src/index.ts");
+    for (const [toolName, toolInput] of [
+      ["read_file", { target_file: filePath }],
+      ["Read", { file_path: filePath }],
+    ] as const) {
+      const denied = pre(
+        ws,
+        { toolName, toolInput, sessionId: sid },
+        env,
+      );
+      expect(JSON.parse(denied.stdout)).toMatchObject({
+        decision: "deny",
+        reason: DENY_REASON,
+      });
+    }
+  });
+
+  it("solo stamp allows parent Read; fat still denies denylist", () => {
+    const ws = workspace();
+    const sid = "solo-read";
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`),
+      "1",
+    );
+    const allowed = pre(
+      ws,
+      {
+        toolName: "read_file",
+        toolInput: { target_file: path.join(ws, "src/index.ts") },
+        sessionId: sid,
+      },
+      { GROK_SESSION_ID: sid },
+    );
+    const out = allowed.stdout ? JSON.parse(allowed.stdout) : {};
+    expect(out.decision).not.toBe("deny");
+    expect(out.hookSpecificOutput?.permissionDecision).not.toBe("deny");
+    const fat = pre(
+      ws,
+      {
+        toolName: "read_file",
+        toolInput: { target_file: path.join(ws, "node_modules/a.js") },
+        sessionId: sid,
+      },
+      { GROK_SESSION_ID: sid },
+    );
+    const fatOut = JSON.parse(fat.stdout);
+    expect(fatOut.hookSpecificOutput?.permissionDecision ?? fatOut.decision).toBe(
+      "deny",
+    );
+  });
+
+  it("/explain does not create solo or parent-escape stamps", () => {
+    const ws = workspace();
+    const sid = "explain-nostamp";
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/explain",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`)),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `parent-escape-${sid}`)),
+    ).toBe(false);
+  });
+
+  it("parent-escape allows Read then Stop consumes", () => {
+    const ws = workspace();
+    const sid = "pe-read";
+    const env = { GROK_SESSION_ID: sid };
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/parent",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    const allowed = pre(
+      ws,
+      {
+        toolName: "read_file",
+        toolInput: { target_file: path.join(ws, "src/index.ts") },
+        sessionId: sid,
+      },
+      env,
+    );
+    const allowedOut = JSON.parse(allowed.stdout);
+    expect(allowedOut.decision).not.toBe("deny");
+    expect(allowedOut.hookSpecificOutput?.permissionDecision).not.toBe("deny");
+    runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage: "[orchestrator]: parent turn",
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: sid },
+    );
+    const again = pre(
+      ws,
+      {
+        toolName: "read_file",
+        toolInput: { target_file: path.join(ws, "src/index.ts") },
+        sessionId: sid,
+      },
+      env,
+    );
+    expect(JSON.parse(again.stdout)).toMatchObject({
+      decision: "deny",
+      reason: DENY_REASON,
+    });
+  });
+
+  it("hooks.md deny-reason matches DENY_REASON; grok json PreToolUse has no matcher", () => {
+    const hooksMd = fs.readFileSync(
+      path.join(root, ".rulesync/reference/hooks.md"),
+      "utf8",
+    );
+    expect(hooksMd).toContain(DENY_REASON);
+    const grokJson = JSON.parse(
+      fs.readFileSync(
+        path.join(root, ".grok/hooks/orchestrate-parent.json"),
+        "utf8",
+      ),
+    );
+    const pre = grokJson.hooks?.PreToolUse ?? [];
+    expect(pre.some((h: { matcher?: string }) => h.matcher)).toBe(false);
+    expect(fs.existsSync(path.join(root, ".tmp/orchestrator-logs/grunt-off-fixture"))).toBe(
+      false,
+    );
   });
 });
