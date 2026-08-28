@@ -2,10 +2,10 @@
 name: commit
 description: >
   Inspect the diff and commit with a Conventional Commits subject line. Use for
-  /commit, "commit this", "commit these changes". Never pushes.
+  /commit, "commit this", "commit these changes". Never git push.
 ---
 
-Inspect `git status` + `git diff` (staged and unstaged) before the message. Never push.
+Inspect `git status` + `git diff` (staged and unstaged) before the message.
 
 Stage only user intent. Never blind `git add -A` / `git add .`. Split unrelated concerns into multiple commits.
 
@@ -17,6 +17,6 @@ Subject: imperative lowercase no trailing period.
 
 NO body. NO footer. NO `Co-Authored-By`. NO `Generated with`. NO 🤖. NO trailers. No AI attribution. Work belongs to the human.
 
-Never `git push`.
+Never git push. Never `git push`. This skill never pushes.
 
 Protocol: `.rulesync/reference/cascade.md`. Do not paste cascade.

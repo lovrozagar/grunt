@@ -23,13 +23,13 @@ Cheap outline. Not a file dump.
 - `.grok/hooks/orchestrate-parent.js` + `orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
 - `.grok/hooks/rtk.json` — RTK
 - `.grok/skills/{write-plan,implement-plan,shared}/` — hand-only (no rulesync SSOT); point to cascade, do not paste
-- `.grok/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push}/` — generated from `.rulesync/skills/`; do not hand-edit
+- `.grok/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` — generated from `.rulesync/skills/`; do not hand-edit
 - `.grok/parent.md` — 1-line pointer to orchestrator agent; not SessionStart
 - `.grok/roles/*.toml`
 - `.grok/global-settings.toml` — merged into `~/.grok/config.toml` by `scripts/sync-global-settings.mjs` (not auto-loaded; project config cannot set `[features]`)
 - `.rulesync/global-settings/` — host manifest and reserved noop payloads
 - `.rulesync/mcp-policy.jsonc` — MCP deny-default SSOT (`default: deny`, `allow: []`)
-- `.rulesync/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode)
+- `.rulesync/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode)
 
 ## Scripts
 - `scripts/check-globals.mjs` — `$HOME/.grok/config.toml` `[agent].name==orchestrator` + `[features].two_pass_compaction==true`; project `.grok/config.toml` must not have `[features]`/`[agent]`; wired as `sync:globals:check` (also after emit-mcp in `rulesync:check`)
@@ -58,7 +58,7 @@ Cheap outline. Not a file dump.
 
 ## Generated (do not hand-edit; committed, not gitignored)
 - `AGENTS.md`, `CLAUDE.md`
-- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push}/` (from `.rulesync/skills/`)
+- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` (from `.rulesync/skills/`)
 - `.grok/agents/*`
 - `.claude/agents/*`
 - `.codex/agents/*`
