@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+/** Unified prereq doctor. Print-only install hints. Never runs installs. */
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+export const CHROMIUM_BINS = [
+  "chromium",
+  "chromium-browser",
+  "google-chrome",
+  "google-chrome-stable",
+  "chrome",
+  "msedge",
+  "microsoft-edge",
+];
+
+export const LIGHTPANDA_REPO = "https://github.com/lightpanda-io/browser";
+const NODE_URL = "https://nodejs.org";
+const RTK_CURL =
+  "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh";
+const RTK_DOCS = "https://www.rtk-ai.app/docs/getting-started/installation/";
+const LP_INSTALL_SH = "curl -fsSL https://pkg.lightpanda.io/install.sh | bash";
+const RULESYNC_SCHEMA = "rulesync schema doctor: npm run rulesync:doctor";
+const REQUIRED = ["node", "npm", "git", "rtk", "rulesync", "lightpanda", "chromium"];
+
+export function nodeMajor(version) {
+  const m = String(version || "").match(/(\d+)/);
+  return m ? Number(m[1]) : 0;
+}
+
+export function whichBin(name, pathEnv = process.env.PATH, platform = process.platform) {
+  if (!name) return "";
+  const delim =
+    platform === "win32" && String(pathEnv || "").includes(";") ? ";" : path.delimiter;
+  const dirs = String(pathEnv || "").split(delim);
+  const names = [name];
+  if (platform === "win32" && !path.extname(name)) {
+    const pathext = String(process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM");
+    for (const raw of pathext.split(";")) {
+      if (!raw) continue;
+      names.push(name + raw);
+      names.push(name + raw.toLowerCase());
+    }
+    names.push(`${name}.exe`);
+  }
+  const uniq = [...new Set(names)];
+  for (const dir of dirs) {
+    if (!dir) continue;
+    for (const n of uniq) {
+      const candidate = path.join(dir, n);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        if (platform === "win32") {
+          try {
+            fs.accessSync(candidate, fs.constants.F_OK);
+            return candidate;
+          } catch {
+            /* try next */
+          }
+        }
+      }
+    }
+  }
+  return "";
+}
+
+function delimOf(pathEnv, platform) {
+  return platform === "win32" && String(pathEnv || "").includes(";") ? ";" : path.delimiter;
+}
+
+function withNmBin(cwd, pathEnv, platform) {
+  const nm = path.join(cwd || "", "node_modules", ".bin");
+  const d = delimOf(pathEnv, platform);
+  return `${nm}${d}${pathEnv || ""}`;
+}
+
+function readNodeVersion(bin) {
+  try {
+    return String(
+      execFileSync(bin, ["-v"], {
+        encoding: "utf8",
+        timeout: 8000,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function lookupChromium(pathEnv, platform) {
+  for (const n of CHROMIUM_BINS) {
+    const hit = whichBin(n, pathEnv, platform);
+    if (hit) return hit;
+  }
+  return "";
+}
+
+export function installHints(id, platform = process.platform) {
+  if (id === "all") {
+    const keys = ["node", "npm", "git", "rtk", "rulesync", "lightpanda", "chromium"];
+    return keys.flatMap((k) => installHints(k, platform));
+  }
+  if (id === "node") {
+    if (platform === "win32") {
+      return [`${NODE_URL} (≥22)`, "nvm / OS pkg", "winget install OpenJS.NodeJS.LTS"];
+    }
+    return [`${NODE_URL} (≥22)`, "nvm / OS pkg"];
+  }
+  if (id === "npm") {
+    return ["npm ships with Node ≥22", NODE_URL];
+  }
+  if (id === "git") {
+    if (platform === "win32") return ["winget install Git.Git"];
+    if (platform === "darwin") return ["brew install git"];
+    return ["sudo apt install git"];
+  }
+  if (id === "rtk") {
+    if (platform === "win32") {
+      return ["rtk.exe on PATH (release zip) or WSL curl", RTK_DOCS];
+    }
+    return [RTK_CURL, "brew install rtk"];
+  }
+  if (id === "rulesync") {
+    return ["npm i -D rulesync", "npx"];
+  }
+  if (id === "lightpanda") {
+    if (platform === "win32") {
+      return [
+        "Windows: native Lightpanda not required; WSL2 only",
+        "wsl --install",
+        `in WSL: ${LP_INSTALL_SH}`,
+        LIGHTPANDA_REPO,
+      ];
+    }
+    if (platform === "darwin") {
+      return [LP_INSTALL_SH, "brew tap lightpanda-io/browser", "brew install lightpanda-io/browser/lightpanda", LIGHTPANDA_REPO];
+    }
+    return [LP_INSTALL_SH, LIGHTPANDA_REPO];
+  }
+  if (id === "chromium") {
+    if (platform === "win32") {
+      return [
+        "winget install Google.Chrome",
+        "winget install Microsoft.Edge",
+        "add chrome.exe or msedge.exe to PATH or shim",
+      ];
+    }
+    if (platform === "darwin") {
+      return ["brew install --cask chromium", "brew install --cask google-chrome"];
+    }
+    return ["sudo apt install chromium"];
+  }
+  return [];
+}
+
+function row(name, status, extra = "") {
+  const a = String(name).padEnd(10);
+  const b = String(status).padEnd(18);
+  const c = extra ? String(extra).trim() : "";
+  return c ? `${a} ${b} ${c}` : `${a} ${b}`;
+}
+
+export function runDoctor({
+  cwd = process.cwd(),
+  pathEnv = process.env.PATH,
+  platform = process.platform,
+  execPath = process.execPath,
+  nodeVersion = process.version,
+} = {}) {
+  const nmPath = withNmBin(cwd, pathEnv, platform);
+  const pathNode = whichBin("node", pathEnv, platform);
+  const nodeBin = pathNode || execPath || "";
+  let ver = "";
+  if (nodeBin) {
+    ver =
+      execPath && nodeBin === execPath
+        ? String(nodeVersion || process.version)
+        : readNodeVersion(nodeBin);
+  }
+  const major = nodeMajor(ver);
+  const nodeOk = Boolean(nodeBin) && major >= 22;
+
+  const npm = whichBin("npm", pathEnv, platform);
+  const git = whichBin("git", pathEnv, platform);
+  const rtk = whichBin("rtk", nmPath, platform);
+  const rulesync = whichBin("rulesync", nmPath, platform);
+  const lightpanda = whichBin("lightpanda", pathEnv, platform);
+  const chromium = lookupChromium(pathEnv, platform);
+  const gh = whichBin("gh", pathEnv, platform);
+
+  const found = {
+    node: nodeOk ? nodeBin : "",
+    npm,
+    git,
+    rtk,
+    rulesync,
+    lightpanda,
+    chromium,
+  };
+
+  const lines = [];
+  if (nodeBin && !nodeOk) {
+    lines.push(row("node", "need ≥22", `${ver} (${nodeBin})`));
+  } else if (nodeOk) {
+    lines.push(row("node", "ok", `${ver} (${nodeBin})`));
+  } else {
+    lines.push(row("node", "missing"));
+  }
+  lines.push(npm ? row("npm", "ok", npm) : row("npm", "missing"));
+  lines.push(git ? row("git", "ok", git) : row("git", "missing"));
+  lines.push(rtk ? row("rtk", "ok", rtk) : row("rtk", "missing"));
+  lines.push(rulesync ? row("rulesync", "ok", rulesync) : row("rulesync", "missing"));
+  lines.push(lightpanda ? row("lightpanda", "ok", lightpanda) : row("lightpanda", "missing"));
+  lines.push(chromium ? row("chromium", "ok", chromium) : row("chromium", "missing"));
+  lines.push(gh ? row("gh", "ok", gh) : row("gh", "missing (optional)"));
+
+  const missingRequired = REQUIRED.filter((k) => (k === "node" ? !nodeOk : !found[k]));
+  if (missingRequired.length) {
+    lines.push("");
+    lines.push("install (print-only; not run):");
+    const seen = new Set();
+    for (const k of missingRequired) {
+      for (const h of installHints(k, platform)) {
+        if (seen.has(h)) continue;
+        seen.add(h);
+        lines.push(h);
+      }
+    }
+  }
+
+  lines.push("");
+  lines.push(RULESYNC_SCHEMA);
+  const stdout = `${lines.join("\n")}\n`;
+  return { code: missingRequired.length ? 1 : 0, stdout, stderr: "" };
+}
+
+function main() {
+  const r = runDoctor();
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  process.exit(r.code);
+}
+
+const thisFile = fileURLToPath(import.meta.url);
+const invoked = process.argv[1] ? path.resolve(process.argv[1]) : "";
+if (invoked === thisFile || import.meta.url === pathToFileURL(invoked).href) {
+  main();
+}

@@ -37,7 +37,7 @@ Commands:
   check         npm run rulesync:check
   sync-globals  npm run sync:globals (dry-run; --apply to write)
   purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
-  doctor        npm run rulesync:doctor
+  doctor        npm run doctor
   help          Show this help
   version       Print package version
 
@@ -236,10 +236,10 @@ describe("start", () => {
     );
   });
 
-  it("doctor npm-runs rulesync:doctor", async () => {
+  it("doctor npm-runs doctor", async () => {
     process.argv = ["node", "grunt", "doctor"];
     await start();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:doctor"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "doctor"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });

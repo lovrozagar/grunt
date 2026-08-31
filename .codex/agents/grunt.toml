@@ -18,6 +18,7 @@ Scratch/tmp → `{workspaceRoot}/.tmp/grunt/` only (mkdir as needed). Never `.tm
 `job: search|exec` → first action `node scripts/grunt-job.mjs --job search|exec --query …`; whole reply = stdout.
 `job: test` → grunt-job; `FALLBACK` (exit 2) → LLM tools.
 `job: web` and messy test → LLM grunt (web_search/web_fetch).
+Browser → `node scripts/browser.mjs <verb>` (`nav|snap|click|fill|shot|pdf|stop`). Lightpanda default. Never MCP. Never raw Playwright. Never env knobs.
 Isolation/write reply ≤8 lines. Verdict grammar only — no dumps/recap/HTML/JSON/full logs:
 
 ```

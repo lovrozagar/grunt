@@ -10,7 +10,7 @@ Grok PostToolUse is observe-only — do not attempt output scrub; compress via R
 
 ## Commands
 
-ls · tree · read · smart · git · gh · glab · aws · psql · pnpm · err · test · json · deps · env · find · diff · log · dotnet · docker · kubectl · oc · summary · grep · rg · init · wget · wc · gain · cc-economics · config · jest · vitest · prisma · tsc · next · lint · prettier · format · playwright · cargo · npm · npx · curl · discover · session · telemetry · learn · run · proxy · pipe · trust · untrust · verify · ruff · pytest · mypy · rake · rubocop · rspec · pip · go · gt · golangci-lint · gradlew · mvn · hook-audit · rewrite · hook · help
+ls · tree · read · smart · git · gh · glab · aws · psql · pnpm · err · test · json · deps · env · find · diff · log · dotnet · docker · kubectl · oc · summary · grep · rg · init · wget · wc · gain · cc-economics · config · jest · vitest · prisma · tsc · next · lint · prettier · format · playwright · lightpanda · cargo · npm · npx · curl · discover · session · telemetry · learn · run · proxy · pipe · trust · untrust · verify · ruff · pytest · mypy · rake · rubocop · rspec · pip · go · gt · golangci-lint · gradlew · mvn · hook-audit · rewrite · hook · help
 
 **git:** diff · log · status · show · add · commit · push · pull · branch · fetch · stash (list show pop apply drop push) · worktree
 **cargo:** build · test · clippy · check · install · nextest
@@ -21,3 +21,6 @@ ls · tree · read · smart · git · gh · glab · aws · psql · pnpm · err �
 Flags: `-v`/`-vv`/`-vvv` · `--ultra-compact` · `--skip-env` · `-h` · `-V`
 
 Unknown cmds passthrough. `rtk run` unfiltered.
+
+**playwright:** test-runner family only — not the browser rail.
+**lightpanda:** browser-rail CDP via `scripts/browser.mjs` (not MCP, not env).

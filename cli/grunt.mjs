@@ -17,7 +17,7 @@ Commands:
   check         npm run rulesync:check
   sync-globals  npm run sync:globals (dry-run; --apply to write)
   purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
-  doctor        npm run rulesync:doctor
+  doctor        npm run doctor
   help          Show this help
   version       Print package version
 
@@ -163,7 +163,7 @@ async function dispatch(cmd, flags, interactive) {
     return
   }
   if (cmd === "doctor") {
-    npmRun("rulesync:doctor")
+    npmRun("doctor")
     return
   }
   process.stdout.write(USAGE)

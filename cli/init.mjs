@@ -21,6 +21,8 @@ const PRODUCT_SCRIPTS = [
   "scrub-text-lib.mjs",
   "sync-global-settings.mjs",
   "telemetry.mjs",
+  "browser.mjs",
+  "doctor.mjs",
   "scrub-text",
 ]
 

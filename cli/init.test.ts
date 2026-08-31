@@ -44,6 +44,8 @@ const PRODUCT_FILES = [
   "scrub-text-lib.mjs",
   "sync-global-settings.mjs",
   "telemetry.mjs",
+  "browser.mjs",
+  "doctor.mjs",
 ];
 
 const SRC_CLAUDE_SETTINGS = {

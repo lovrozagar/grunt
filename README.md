@@ -5,6 +5,7 @@ Multi-agent orchestrator SoT — deep-merge rulesync trees product scripts and g
 OSS drop-in; merges existing configs; switches default provider flow to Grunt.
 
 - [Install](#install)
+- [Prerequisites](#prerequisites)
 - [Usage](#usage)
 - [CLI](#cli)
 - [Init](#init)
@@ -33,6 +34,29 @@ npx @lovrozagar/grunt
 - Do not `npm test` as a consumer
 - Package: `@lovrozagar/grunt` `0.3.9` MIT · https://github.com/lovrozagar/grunt
 
+## Prerequisites
+
+All OS. Print-only. Never auto-install.
+
+```
+npx grunt doctor
+node scripts/doctor.mjs
+```
+
+Exit 1 if any required missing; 0 if all required ok. Optional `gh` reported only.
+
+| tool | required | install |
+| --- | --- | --- |
+| node ≥22 + npm | yes | https://nodejs.org (≥22) · nvm / OS pkg · win `winget install OpenJS.NodeJS.LTS` |
+| git | yes | linux `sudo apt install git` · mac `brew install git` · win `winget install Git.Git` |
+| rtk | yes | linux/mac `curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh \| sh` or `brew install rtk` · win release zip `rtk.exe` on PATH or WSL curl ([docs](https://www.rtk-ai.app/docs/getting-started/installation/)) |
+| rulesync | yes | `npm i -D rulesync` / npx (PATH or npx-able) |
+| lightpanda | yes | `curl -fsSL https://pkg.lightpanda.io/install.sh \| bash` · mac `brew tap lightpanda-io/browser` · win WSL only |
+| chromium-family | yes | linux `sudo apt install chromium` · mac `brew install --cask chromium` or `google-chrome` · win `winget install Google.Chrome` / `Microsoft.Edge` + PATH |
+| gh | no | report only |
+
+Rulesync schema doctor is separate: `npm run rulesync:doctor`.
+
 ## Usage
 
 - TTY no command → menu (init default; generate check sync-globals purge-mcps doctor help quit)
@@ -48,7 +72,7 @@ npx @lovrozagar/grunt
 - `check` → `npm run rulesync:check`
 - `sync-globals` → `npm run sync:globals` (dry-run); `--apply` → `sync:globals:apply`
 - `purge-mcps` → `npm run purge:global-mcps` (dry-run); `--apply` → `purge:global-mcps:apply`
-- `doctor` → `npm run rulesync:doctor`
+- `doctor` → `npm run doctor` (`node scripts/doctor.mjs`). Rulesync schema: `npm run rulesync:doctor`
 - `help`
 - `version`
 
@@ -81,18 +105,24 @@ SoT: `.rulesync/subagents/{orchestrator grunt implementer thinker}.md`
 
 Emit: `.claude/` `.grok/` `.agents/` `.gemini/`
 
-- **orchestrator** (parent) — always spawn+prompt; user-facing only `[orchestrator]:` (or child role tag) one-line echo. `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
+- **orchestrator** (parent) — always spawn+prompt; user-facing only `[orchestrator]:` (or child role tag) one-line echo. `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
 - **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation `verdict:`. Never feature solution. Never spawn. World fact: `job: web`
 - **implementer** — write already-defined solution on allowlisted paths. TDD when spec/plan says tests. Validate + sim after write. Fat dumps via `need:`. Never spawn. Never plan. Id is **implementer** (not Implementor)
 - **thinker** — plan/deep reason; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
 
 Children never spawn. Spawn only grunt|implementer|thinker. Omit model on spawn; frontmatter on agent files picks haiku/sonnet/opus vs grok-4.5 / grok-4.6 / other hosts. Voice: `.rulesync/reference/output.md`. Protocol: `.rulesync/reference/cascade.md`. `AGENTS.md`/`CLAUDE.md` spawn-first. `GEMINI.md` → `@AGENTS.md`. Goals: synced configs across grok build claude code codex gemini cli antigravity; max situational speed; superterse token savings; max/min reasoning by role.
 
+## Browser
+
+Lightpanda-first session CLI: `node scripts/browser.mjs nav|snap|click|fill|shot|pdf|stop|doctor|ensure`. Zero MCP. Zero env knobs. Chromium only for `shot`/`pdf`/`trace`, Windows, missing Lightpanda, one probe-fail replay, or paint hosts. Session: `.tmp/grunt/browser/`. Spec: [`.rulesync/reference/browser.md`](.rulesync/reference/browser.md).
+
+`node scripts/browser.mjs doctor` (alias `ensure`) runs the unified doctor (`scripts/doctor.mjs`). Install engines: [Prerequisites](#prerequisites).
+
 ## Skills
 
 Present under `.claude` / `.rulesync` / `.agents`:
 
-- `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `parent` `solo`
+- `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo`
 - Grok-only: `write-plan` `implement-plan` (`/write-plan` plan-only → `next: /implement-plan`)
 
 ## Generate
@@ -104,7 +134,7 @@ Pipeline (no `-t geminicli`):
 3. `emit-gemini.mjs` — `GEMINI.md` `.gemini/agents/{id}/agent.md` MCP `.gemini/settings.json`
 4. `emit-agent-shell-tools` — Claude grunt body `Bash`; other hosts `run_terminal_command` (hooks-union)
 
-`check` / `doctor` = rulesync check / doctor.
+`check` = rulesync check. `doctor` = unified prereqs. Schema: `npm run rulesync:doctor`.
 
 Emit writes other-CLI trees from `.rulesync` for the **next** process of that CLI. Not a live hop into another host.
 
@@ -288,7 +318,7 @@ Repo-relative (repository root):
 
 ## Layout
 
-Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/telemetry.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE`
+Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/telemetry.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE`
 
 No `scripts/*.test.ts` `scripts/fixtures/` `docs/` `coverage/` `vitest.config.ts` in `files`.
 
