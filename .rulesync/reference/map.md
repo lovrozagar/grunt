@@ -21,7 +21,7 @@ Cheap outline. Not a file dump.
 - Default output: `.rulesync/reference/output.md` (overview.md → AGENTS.md; also agent bodies + CLAUDE.md, not auto-injected)
 
 ## Grok hand files
-- `.grok/hooks/orchestrate-parent.js` + `orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
+- `.grok/hooks/orchestrate-parent.js` + `.grok/hooks/orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
 - `.grok/hooks/rtk.json` — RTK
 - `.grok/skills/{write-plan,implement-plan,shared}/` — hand-only (no rulesync SSOT); point to cascade, do not paste
 - `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` — generated from `.rulesync/skills/`; do not hand-edit
@@ -45,12 +45,11 @@ Cheap outline. Not a file dump.
 - `scripts/emit-mcp-policy.mjs` — emit project MCP deny-default from `.rulesync/mcp-policy.jsonc` (not `rulesync -f mcp`); owns `.gemini/settings.json` `mcpServers` (merge extra keys)
 - `scripts/emit-gemini.mjs` — `GEMINI.md` (`@AGENTS.md`) + `.gemini/agents/{id}/agent.md` from `.rulesync/subagents` (not `rulesync -t geminicli`); no prune; does not touch settings
 - `scripts/emit-agent-shell-tools.mjs` — after rulesync subagents: rewrite `.claude/agents/grunt.md` body `Bash`; grok/codex/gemini/generic keep `run_terminal_command`
-- `scripts/telemetry.mjs` — append-only `.tmp/orchestrator-logs/telemetry.ndjson` from hooks / grunt-job CLI; fail-open; never stdout
 - `scripts/browser.mjs` — session browser rail `nav|snap|click|fill|shot|pdf|stop`; Lightpanda default; Chromium on verb/OS/probe/paint-host/one-escalate; `.tmp/grunt/browser/`
 
 ## Tmp
 - `.tmp/plans/` — persist-plan / parent / implementer
-- `.tmp/orchestrator-logs/` — hooks + grunt-job telemetry (shared; not grunt scratch)
+- `.tmp/orchestrator-logs/` — parent stamps (shared; not grunt scratch)
 - `.tmp/grunt/` — grunt scratch/tmp only
 - `.tmp/grunt/browser/` — browser session/profile/shot/pdf (not MCP)
 - `.tmp/grunt/handoffs/` — persist-handoff / `/handoff`; own serial counter (not plan serials)

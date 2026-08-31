@@ -28,8 +28,10 @@ import {
   processHookPayload,
   rewriteGruntScratchPath,
 } from "./gate-fat-tools.mjs";
-import { DENY_REASON } from "../.grok/hooks/orchestrate-parent.js";
-import { ORCHESTRATOR_LOGS_DIR } from "./telemetry.mjs";
+import {
+  DENY_REASON,
+  ORCHESTRATOR_LOGS_DIR,
+} from "../.grok/hooks/orchestrate-parent.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");

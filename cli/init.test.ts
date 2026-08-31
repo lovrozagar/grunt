@@ -56,7 +56,6 @@ const PRODUCT_FILES = [
   "scrub-spawn-prompt.mjs",
   "scrub-text-lib.mjs",
   "sync-global-settings.mjs",
-  "telemetry.mjs",
   "browser.mjs",
   "doctor.mjs",
 ];
@@ -1003,8 +1002,8 @@ describe("init", () => {
     expect(pkg.name).toBe("fixture-pkg");
     expect(fs.existsSync(path.join(pkgRoot, ".tmp"))).toBe(true);
     expect(fs.readFileSync(path.join(pkgRoot, ".gitignore"), "utf8")).toBe(".tmp/\n");
-    expect(fs.readFileSync(path.join(pkgRoot, "scripts", "telemetry.mjs"), "utf8")).toBe(
-      "telemetry.mjs",
+    expect(fs.readFileSync(path.join(pkgRoot, "scripts", "grunt-job.mjs"), "utf8")).toBe(
+      "grunt-job.mjs",
     );
     // self-skip: markdown/settings stay exactly as-is, no sentinel wrap
     expect(fs.readFileSync(path.join(pkgRoot, "CLAUDE.md"), "utf8")).toBe("CLAUDE.md content");
@@ -1124,31 +1123,19 @@ describe("init", () => {
     ]);
   });
 
-  it("applyGlobals true still applies when telemetry auto-skip would fire", () => {
+  it("applyGlobals true still applies when sentinel auto-skip would fire", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("grunt-force-globals-");
-    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
-    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\n",
+    );
     const exec = vi.fn();
     init(dest, { pkgRoot, execFileSync: exec, applyGlobals: true });
     expect(exec.mock.calls.map((c) => c[1])).toEqual([
       ["install"],
       ["run", "rulesync:generate"],
       ["run", "sync:globals:apply"],
-      ["run", "rulesync:check"],
-    ]);
-  });
-
-  it("auto-skip globals when telemetry.mjs exists", () => {
-    const pkgRoot = stubPkgRoot();
-    const dest = tmp("grunt-auto-tel-");
-    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
-    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
-    const exec = vi.fn();
-    init(dest, { pkgRoot, execFileSync: exec });
-    expect(exec.mock.calls.map((c) => c[1])).toEqual([
-      ["install"],
-      ["run", "rulesync:generate"],
       ["run", "rulesync:check"],
     ]);
   });
@@ -1174,8 +1161,7 @@ describe("init", () => {
     const dest = tmp("grunt-rerun-nosent-");
     fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
     fs.writeFileSync(path.join(dest, "AGENTS.md"), "hand-written consumer doc\n");
-    fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
-    fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
+    fs.mkdirSync(path.join(dest, ".rulesync"), { recursive: true });
     fs.writeFileSync(path.join(dest, "CLAUDE.grunt.md"), "stale side");
     const exec = vi.fn();
     init(dest, { pkgRoot, execFileSync: exec });
@@ -1288,6 +1274,14 @@ describe("destAlreadyInited / shouldAutoSkipGlobals", () => {
   it(".rulesync means inited, not auto-skip", () => {
     const dest = tmp("inspect-rulesync-");
     fs.mkdirSync(path.join(dest, ".rulesync"));
+    expect(destAlreadyInited(dest)).toBe(true);
+    expect(shouldAutoSkipGlobals(dest)).toBe(false);
+  });
+
+  it(".grok/hooks/orchestrate-parent.js means inited, not auto-skip", () => {
+    const dest = tmp("inspect-hook-");
+    fs.mkdirSync(path.join(dest, ".grok", "hooks"), { recursive: true });
+    fs.writeFileSync(path.join(dest, ".grok", "hooks", "orchestrate-parent.js"), "");
     expect(destAlreadyInited(dest)).toBe(true);
     expect(shouldAutoSkipGlobals(dest)).toBe(false);
   });

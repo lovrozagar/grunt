@@ -32,7 +32,7 @@ npx @lovrozagar/grunt
 
 - Same as `npx @lovrozagar/grunt init` when no command
 - Do not `npm test` as a consumer
-- Package: `@lovrozagar/grunt` `0.3.9` MIT · https://github.com/lovrozagar/grunt
+- Package: `@lovrozagar/grunt` `0.4.2` MIT · https://github.com/lovrozagar/grunt
 
 ## Prerequisites
 
@@ -87,8 +87,8 @@ Rulesync schema doctor is separate: `npm run rulesync:doctor`.
 
 - Merge SoT `npm install` `rulesync:generate` `sync:globals:apply` `rulesync:check`
 - `--skip-globals` skips apply
-- Re-init auto-skips globals when `<!-- grunt:begin -->` in `AGENTS.md`/`CLAUDE.md` **or** `scripts/telemetry.mjs` exists
-- First init (no sentinel no telemetry) applies globals unless flagged
+- Re-init auto-skips globals when `<!-- grunt:begin -->` in `AGENTS.md`/`CLAUDE.md`
+- First init (no sentinel) applies globals unless flagged
 - Owned trees/scripts refresh; extra `.rulesync` files kept; patches to grunt-owned files lost
 
 ## Version bump
@@ -120,10 +120,13 @@ Lightpanda-first session CLI: `node scripts/browser.mjs nav|snap|click|fill|shot
 
 ## Skills
 
-Present under `.claude` / `.rulesync` / `.agents`:
+Present under `.claude` / `.rulesync` / `.agents` (`rulesync -f skills` mirrors SSOT):
 
 - `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo`
-- Grok-only: `write-plan` `implement-plan` (`/write-plan` plan-only → `next: /implement-plan`; advise unlock = pick **1. Implement**, not `ok`/`yes`/`go`; slash `/implement-plan` still valid alias)
+
+Grok-only (hand files under `.grok/skills/`; no `.rulesync/skills` SSOT; not mirrored):
+
+- `write-plan` `implement-plan` `shared` (`/write-plan` plan-only → `next: /implement-plan`; advise unlock = pick **1. Implement**, not `ok`/`yes`/`go`; slash `/implement-plan` still valid alias)
 
 ## Generate
 
@@ -141,7 +144,7 @@ Emit writes other-CLI trees from `.rulesync` for the **next** process of that CL
 ## Config
 
 - SoT merge into consumer repo; existing configs kept where not grunt-owned
-- Globals: first init apply; re-init auto-skip (sentinel / telemetry) or `--skip-globals`
+- Globals: first init apply; re-init auto-skip (sentinel) or `--skip-globals`
 - `sync-globals` / `purge-mcps`: dry-run default; `--apply` writes
 - Hosts: grok claude codex gemini antigravity
 
@@ -154,6 +157,18 @@ Protocol picture: one CLI host process, parent-only orchestrator in that session
 Draw **one** CLI host bubble. That bubble is **this** session’s CLI: Grok Build, Claude Code, Codex, Gemini CLI, or Antigravity. The CLI **is** the host — not a peer router beside another CLI. Parent lives **inside** that host session. Children spawn **inside the same process**. Other CLIs = emit/config on disk only; no runtime hop; no shared spawn/peek line.
 
 User-visible conversation attaches only to the parent. Children never talk to the user. Children never spawn.
+
+### Host support (GAP)
+
+Not feature-parity across hosts. In-tree mapping only; do not invent peek/kill APIs. GAP rows: no fake peeks, no auto-kill; block on spawn return and classify `done`.
+
+| Host | Spawn | Peek | Kill |
+| --- | --- | --- | --- |
+| Grok | `spawn_subagent` `background:true` → `task_id` | `get_command_or_subagent_output` + `timeout_ms=60000` | `kill_command_or_subagent` (user-ask only) |
+| Claude Code | `Agent` if the parent session exposes it | GAP unless an in-tree schema names a status/output tool on that id (do not invent `TaskOutput`); else block on Agent return and classify `done`. Agent launch ≠ child done; in-flight host Stop → only `[orchestrator]: wait grunt`; no SendMessage | GAP unless in-tree; no auto-kill |
+| Codex | host agent/call | GAP; block on host agent/call return; classify `done` | GAP; no auto-kill |
+| Antigravity | main-session parent | GAP peek/kill; main-session parent | GAP; no auto-kill |
+| Gemini | not emitted; tracked gap | GAP; no fake peeks | GAP; no auto-kill |
 
 ### Nested diagram
 
@@ -318,15 +333,17 @@ Repo-relative (repository root):
 
 ## Layout
 
-Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/telemetry.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE`
+Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/guarded-roots.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE` `CHANGELOG.md`
 
-No `scripts/*.test.ts` `scripts/fixtures/` `docs/` `coverage/` `vitest.config.ts` in `files`.
+No `scripts/*.test.ts` `scripts/fixtures/` `docs/` `coverage/` `vitest.config.ts` in `files`. `cli` dir ships whole (includes `cli/*.test.ts`).
 
-Repo root (also): `coverage/` `.gemini/` — no `src/` no `CONTRIBUTING` no `docs/`
+Not packed: `GEMINI.md` `.gemini/` — `emit-gemini.mjs` writes them on `generate` / `init` (`GEMINI.md` → `@AGENTS.md`). Not in `files`.
+
+Repo root (also): `coverage/` `.gemini/` `GEMINI.md` — no `src/` no `CONTRIBUTING` no `docs/`
 
 - `bin/grunt.js` — CLI bin
 - `cli/grunt.mjs` — commands
-- `scripts/` — generate emits `telemetry.mjs` (re-init sentinel) `scrub-text`
+- `scripts/` — init copies product scripts (`grunt-job.mjs` `scrub-text` …). Re-init sentinels: `.grok/hooks/orchestrate-parent.js` `.rulesync` `<!-- grunt:begin -->`
 - `.rulesync/` — SoT (subagents skills reference)
 - `.claude/` `.grok/` `.codex/` `.agents/` `.gemini/` — host emit
 - `coverage/` — vitest local not published

@@ -1,6 +1,6 @@
 {
   "name": "@lovrozagar/grunt",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Multi-agent orchestrator SoT — deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
   "keywords": [
     "agents",
@@ -39,7 +39,6 @@
     "scripts/scrub-spawn-prompt.mjs",
     "scripts/scrub-text-lib.mjs",
     "scripts/sync-global-settings.mjs",
-    "scripts/telemetry.mjs",
     "scripts/browser.mjs",
     "scripts/doctor.mjs",
     "scripts/scrub-text",
@@ -52,7 +51,8 @@
     "CLAUDE.md",
     ".mcp.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "publishConfig": {

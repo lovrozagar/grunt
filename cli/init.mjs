@@ -21,7 +21,6 @@ const PRODUCT_SCRIPTS = [
   "scrub-spawn-prompt.mjs",
   "scrub-text-lib.mjs",
   "sync-global-settings.mjs",
-  "telemetry.mjs",
   "browser.mjs",
   "doctor.mjs",
   "scrub-text",
@@ -74,14 +73,13 @@ function destHasGruntSentinel(dest) {
 
 export function destAlreadyInited(dest) {
   return (
-    fs.existsSync(path.join(dest, "scripts", "telemetry.mjs")) ||
     fs.existsSync(path.join(dest, ".grok", "hooks", "orchestrate-parent.js")) ||
     fs.existsSync(path.join(dest, ".rulesync"))
   )
 }
 
 export function shouldAutoSkipGlobals(dest) {
-  return destHasGruntSentinel(dest) || fs.existsSync(path.join(dest, "scripts", "telemetry.mjs"))
+  return destHasGruntSentinel(dest)
 }
 
 function detectNewline(text) {

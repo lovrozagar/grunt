@@ -32,7 +32,7 @@ Advise finals: numbered pick each on own line after tagged recap:
 1. Implement
 2. Tweak
 Slash `/implement-plan` + explicit implement = Implement. `ok`/`yes`/`y`/`continue` ≠ implement after conversational advise.
-Parent = orchestrator. You do not talk. Spawn wait echo.
+Parent = orchestrator (this file). You do not talk. Spawn wait echo.
 Spawn only grunt|implementer|thinker. Never spawn orchestrator. Children never spawn.
 You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry. Only /solo (stamp grunt-off-{sid} this session) escapes spawn workflow. /explain=voice+post-child recap never parent Read. No try-then-spawn. No parent probe. After child: legal tag + one-line recap; advise leftover numbered pick on following lines not crammed. Echo = report not command. Siblings still run: `[grunt]:` echo. No skip-spawn. /handoff = one-turn in-parent write to `.tmp/grunt/handoffs/`; recap `[handoff]:`. `/pickup` spawn-first; grunt resolve if needed; never parent Read; not a mode.
 `/parent` hook last-ditch only. Skills spawn-first. Only `/solo` escapes spawn workflow.

@@ -17,11 +17,9 @@ import {
 import {
   denyResponse,
   fatHookOutput,
-  fileSizeBytes,
   isWorkspaceGruntJob,
   isParentOrchestrator,
   processFatTools,
-  resolveReadPath,
   rewriteGruntScratchPath,
   subagentTypeOf,
 } from "../../scripts/gate-fat-tools.mjs";
@@ -29,8 +27,8 @@ import { persistPlan } from "../../scripts/persist-plan.mjs";
 import { persistHandoff } from "../../scripts/persist-handoff.mjs";
 import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
-import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs";
 
+export const ORCHESTRATOR_LOGS_DIR = ".tmp/orchestrator-logs";
 export const DENY_REASON =
   "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
@@ -70,7 +68,6 @@ const PARENT_SKILLS = new Set([
   "write-plan",
   "implement-plan",
 ]);
-const READ_TOOLS = new Set(["readfile", "read"]);
 const INTERCEPT_JOBS = new Set(["search", "exec"]);
 const MAX_STOP = 3;
 const MAX_INTERCEPT = 3;
@@ -104,7 +101,6 @@ function preToolUse(data) {
   const toolKey = eventKey(toolName);
   let toolInput = data.toolInput;
   if (toolInput == null) toolInput = data.tool_input;
-  logPreTool(data, toolKey, toolInput);
 
   const sub = subagentTypeOf(data);
   if (sub || !isParentOrchestrator(data)) {
@@ -171,30 +167,6 @@ export function isSoloMode(data) {
 function hasParentEscape(data) {
   const p = stampPath(data, "parent-escape");
   return Boolean(p && fs.existsSync(p));
-}
-
-function logPreTool(data, toolKey, toolInput) {
-  const fields = {};
-  if (SPAWN_TOOLS.has(toolKey) && toolInput && typeof toolInput === "object") {
-    fields.spawnType = String(
-      toolInput.subagent_type || toolInput.subagentType || "",
-    );
-    const rf = toolInput.resume_from ?? toolInput.resumeFrom;
-    fields.resumeFromCount =
-      rf == null || rf === "" ? 0 : Array.isArray(rf) ? rf.length : 1;
-  }
-  if (READ_TOOLS.has(toolKey) && toolInput && typeof toolInput === "object") {
-    const raw =
-      toolInput.target_file ||
-      toolInput.file_path ||
-      toolInput.targetFile ||
-      toolInput.filePath ||
-      "";
-    fields.fileSizeBytes = fileSizeBytes(resolveReadPath(raw, data));
-  }
-  if (Object.keys(fields).length) {
-    logTelemetry("pretool", fields, workspaceRootOf(data));
-  }
 }
 
 function emitFat(data) {
@@ -481,22 +453,11 @@ export function lastAssistantFromTranscript(filePath) {
   }
 }
 
-function logParentStop(data, fields) {
-  logTelemetry("parent-stop", fields, workspaceRootOf(data));
-}
-
 function stop(data) {
   if (data.subagentType || data.subagent_type) {
     return interceptNeed(data, "Stop");
   }
   if (data.stopHookActive || data.stop_hook_active) {
-    logParentStop(data, {
-      recap: false,
-      recapSource: "none",
-      attempt: 0,
-      failOpen: true,
-      stopHookActive: true,
-    });
     return 0;
   }
   const reason = String(data.reason || "");
@@ -512,28 +473,16 @@ function stop(data) {
   }
 
   const payloadMsg = payloadAssistantMessage(data);
-  let recapSource = "none";
-  let msg = "";
-  if (payloadMsg) {
-    msg = payloadMsg;
-    recapSource = "payload";
-  } else {
+  let msg = payloadMsg;
+  if (!msg) {
     const tp = data.transcript_path || data.transcriptPath || "";
     msg = lastAssistantFromTranscript(tp);
-    if (msg) recapSource = "transcript";
   }
 
   const waitFirst = firstNonEmptyStripped(msg) === WAIT_GRUNT;
   if (waitFirst && !isWaitGruntExact(msg)) {
     // fall through to block — leftover lines not allowed on mid-turn wait
   } else if (isRecap(msg)) {
-    logParentStop(data, {
-      recap: true,
-      recapSource,
-      attempt: 0,
-      failOpen: false,
-      stopHookActive: false,
-    });
     return 0;
   }
 
@@ -544,26 +493,12 @@ function stop(data) {
     if (!Number.isFinite(n) || n < 0) n = 0;
   }
   if (n >= MAX_STOP) {
-    logParentStop(data, {
-      recap: false,
-      recapSource,
-      attempt: n,
-      failOpen: true,
-      stopHookActive: false,
-    });
     return 0;
   }
   if (stopStamp) {
     fs.mkdirSync(path.dirname(stopStamp), { recursive: true });
     fs.writeFileSync(stopStamp, String(n + 1));
   }
-  logParentStop(data, {
-    recap: false,
-    recapSource,
-    attempt: n + 1,
-    failOpen: false,
-    stopHookActive: false,
-  });
   const reasonText = STOP_REASONS[Math.min(n, STOP_REASONS.length - 1)];
   emit({ decision: "block", reason: reasonText });
   return 0;
@@ -572,30 +507,18 @@ function stop(data) {
 function interceptNeed(data, hookEventName) {
   const ws = workspaceRootOf(data);
   if (data.stopHookActive || data.stop_hook_active) {
-    logTelemetry(
-      "stop",
-      { parseOk: false, intercept: "none" },
-      ws,
-    );
     return 0;
   }
   const msg = data.lastAssistantMessage || data.last_assistant_message || "";
   const parsed = parseNeed(msg);
   if (!parsed.ok) {
-    logTelemetry("stop", { parseOk: false, intercept: "none" }, ws);
     return 0;
   }
   const jobs = parsed.jobs;
-  const names = jobs.map((j) => j.job);
   if (
     jobs.length > 4 ||
     !jobs.every((j) => INTERCEPT_JOBS.has(j.job))
   ) {
-    logTelemetry(
-      "stop",
-      { parseOk: true, jobs: names, intercept: "none" },
-      ws,
-    );
     return 0;
   }
 
@@ -606,11 +529,6 @@ function interceptNeed(data, hookEventName) {
     if (!Number.isFinite(n) || n < 0) n = 0;
   }
   if (n >= MAX_INTERCEPT) {
-    logTelemetry(
-      "stop",
-      { parseOk: true, jobs: names, intercept: "none" },
-      ws,
-    );
     return 0;
   }
 
@@ -635,16 +553,6 @@ function interceptNeed(data, hookEventName) {
       result = { fallback: true, text: "FALLBACK\n" };
     }
     if (!result || result.fallback) {
-      logTelemetry(
-        "stop",
-        {
-          parseOk: true,
-          jobs: names,
-          intercept: "FALLBACK",
-          query: job.query,
-        },
-        ws,
-      );
       return 0;
     }
     parts.push(String(result.text || "").trimEnd());
@@ -654,11 +562,6 @@ function interceptNeed(data, hookEventName) {
     fs.writeFileSync(interceptStamp, String(n + 1));
   }
   const reason = parts.join("\n");
-  logTelemetry(
-    "stop",
-    { parseOk: true, jobs: names, intercept: "grunt-job" },
-    ws,
-  );
   emit({
     decision: "block",
     hookSpecificOutput: {

@@ -11,7 +11,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   autoMd,
+  collapseBlankRuns,
+  collapseInternalWs,
   decodeUtf8,
+  fenceMatch,
   helpText,
   intentMode,
   normalizeMd,
@@ -20,6 +23,7 @@ import {
   parseArgs,
   scrubText,
   stripFiller,
+  trimEdgeBlanks,
 } from "./scrub-text-lib.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -201,6 +205,16 @@ describe("intent / filler", () => {
     );
   });
 
+  it("maps remaining mid-intent phrases", () => {
+    expect(stripFiller("make me an api")).toBe("make api");
+    expect(stripFiller("i want the docs")).toBe("docs");
+    expect(stripFiller("i need the logs")).toBe("logs");
+    expect(stripFiller("i want a demo")).toBe("demo");
+    expect(stripFiller("i need a patch")).toBe("patch");
+    expect(stripFiller("i want coffee")).toBe("coffee");
+    expect(stripFiller("i need coffee")).toBe("coffee");
+  });
+
   it("keeps typos (no spellcheck)", () => {
     expect(intentMode("can you make me a loook minimal ui")).toBe(
       "make loook minimal ui",
@@ -234,6 +248,20 @@ describe("parseArgs / help / decodeUtf8", () => {
 
   it("rejects invalid UTF-8 with a labeled error", () => {
     expect(() => decodeUtf8(Buffer.from([0xff]), "stdin")).toThrow(/stdin:/);
+    expect(decodeUtf8(Buffer.from("ok"), "stdin")).toBe("ok");
+  });
+
+  it("exports blank/ws/fence helpers", () => {
+    expect(collapseBlankRuns(["a", "", "", "", "b"], 2)).toEqual([
+      "a",
+      "",
+      "",
+      "b",
+    ]);
+    expect(trimEdgeBlanks(["", "keep", ""])).toEqual(["keep"]);
+    expect(collapseInternalWs("  a \t  b  ")).toBe("a b");
+    expect(fenceMatch("```js")?.[2]).toBe("```");
+    expect(fenceMatch("not a fence")).toBeNull();
   });
 
   it("normalizes newlines independently", () => {

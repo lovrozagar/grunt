@@ -4,7 +4,6 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { logTelemetry } from "./telemetry.mjs";
 
 export const FALLBACK = "FALLBACK";
 export const SHELL_META = /[|&;`$(){}<>\n\r]/;
@@ -443,14 +442,12 @@ function main() {
   try {
     const parsed = parseArgv(process.argv.slice(2));
     if (parsed.unknown) {
-      logTelemetry("grunt-job", { fallback: true, query: parsed.query }, process.cwd());
       process.stdout.write(FALLBACK + "\n");
       return 2;
     }
     const ws = process.cwd();
     const cwd = parsed.cwd ? resolveJobCwd(parsed.cwd, ws) : ws;
     if (!cwd) {
-      logTelemetry("grunt-job", { fallback: true, query: parsed.query }, ws);
       process.stdout.write(FALLBACK + "\n");
       return 2;
     }
@@ -461,15 +458,9 @@ function main() {
       path: parsed.path,
       glob: parsed.glob,
     });
-    logTelemetry(
-      "grunt-job",
-      { job: parsed.job, fallback: Boolean(result.fallback), query: parsed.query },
-      ws,
-    );
     process.stdout.write(result.text);
     return result.code;
   } catch {
-    logTelemetry("grunt-job", { fallback: true }, process.cwd());
     process.stdout.write(FALLBACK + "\n");
     return 2;
   }

@@ -1,0 +1,187 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.4.2] - 2026-08-31
+
+### Added
+
+- Keep a Changelog history in `CHANGELOG.md` (this file); publish it via `package.json` `files`
+- `scripts/guarded-roots.test.ts` for generate/check/watch snapshot-remerge
+- README host-support GAP table (Grok/Claude/Codex/Antigravity/Gemini spawn-peek-kill; no invented peek/kill APIs)
+- scrub-text tests for remaining mid-intent phrases and blank/ws/fence helpers
+- init tests: sentinel auto-skip without a telemetry file; `.grok/hooks/orchestrate-parent.js` means inited, not auto-skip
+
+### Changed
+
+- Parent SoT: `Parent = orchestrator (this file)` in `AGENTS.md` / `CLAUDE.md` / rulesync rules
+- `.rulesync/reference/hooks.md` and `map.md`: repo-relative hook/script paths; drop `scripts/telemetry.mjs` from the map
+- README package version `0.4.2`; re-init sentinels no longer mention telemetry; Grok-only `write-plan` `implement-plan` `shared` noted as hand files (not rulesync SSOT); published `files` list documents `guarded-roots.mjs` + `CHANGELOG.md` and drops telemetry
+- `cli/init.mjs`: drop `telemetry.mjs` from `PRODUCT_SCRIPTS`; `shouldAutoSkipGlobals` no longer treats `scripts/telemetry.mjs` as a sentinel
+- `scripts/grunt-job.mjs` and `.grok/hooks/orchestrate-parent.js`: strip `logTelemetry`; `ORCHESTRATOR_LOGS_DIR` inlined on the hook
+- Tests drop NDJSON telemetry assertions (`cli/init.test.ts`, `scripts/orchestrate-parent.test.ts`, `scripts/gate-fat-tools.test.ts`)
+
+### Removed
+
+- Product telemetry: `scripts/telemetry.mjs` (append-only `.tmp/orchestrator-logs/telemetry.ndjson` from hooks / grunt-job; fail-open)
+- Telemetry as a re-init / globals auto-skip sentinel
+- `scripts/telemetry.mjs` from the published `files` list (`scripts/telemetry.test.ts` already absent)
+
+## [0.4.1] - 2026-08-31
+
+### Added
+
+- Init snapshot/remerge of guarded roots `AGENTS.md` `CLAUDE.md` `GEMINI.md` around generate/check/watch
+- Orchestrator advise-first Implement picks; `ok` / `yes` / `continue` ≠ implement after conversational advise
+
+## [0.4.0] - 2026-08-31
+
+### Added
+
+- Lightpanda-first session browser rail `nav|snap|click|fill|shot|pdf|stop` plus unified doctor
+- Browser skill shipped to host trees
+- `/pickup` spawn-first handoff counterpart (not a mode)
+
+## [0.3.11] - 2026-08-28
+
+### Added
+
+- Prompt-is-spec implementer write allowlist (gate)
+
+## [0.3.10] - 2026-08-28
+
+### Added
+
+- `commit-push` release and deploy skills
+
+### Changed
+
+- README rewritten as a full product guide
+
+### Removed
+
+- Architecture Excalidraw diagram
+
+## [0.3.9] - 2026-08-28
+
+### Changed
+
+- Clack CLI prompts
+
+### Fixed
+
+- Orchestrator spawn-first deny Read; clarify `DENY_REASON`
+
+## [0.3.8] - 2026-08-27
+
+### Added
+
+- `/cascade` exit-solo skill
+
+## [0.3.7] - 2026-08-27
+
+### Fixed
+
+- Consumer hook permissions deny without `Write(platform)`
+
+## [0.3.6] - 2026-08-27
+
+### Fixed
+
+- Deny parent Write; voice Stop
+
+## [0.3.5] - 2026-08-27
+
+### Fixed
+
+- Hook `package.json` `"type": "module"` so Stop ESM loads
+- Positive-only Stop; thinker offload
+
+## [0.3.4] - 2026-08-27
+
+### Fixed
+
+- Recap tags; stop-block reset
+
+## [0.3.3] - 2026-08-27
+
+### Added
+
+- Stop walls with always-do XOR map
+
+## [0.3.2] - 2026-08-27
+
+### Added
+
+- `--skip-globals` and smarter init merge
+
+## [0.3.1] - 2026-08-27
+
+### Added
+
+- CI publish `@lovrozagar/grunt` to GitHub Packages
+
+### Fixed
+
+- Stop recap, spawn cap, scratch rewrite
+
+## [0.3.0] - 2026-08-27
+
+### Added
+
+- Skills: `handoff`, `solo`, `commit`, `commit-and-push`, `explain`, `parent` (rulesync + host trees)
+- Larger init pipeline: `emit-gemini`, `emit-agent-shell-tools`, `emit-mcp-policy`, `hooks-union`, `persist-handoff`
+- Gemini CLI agent shells + settings emit
+- Orchestrate-parent expansion; host `hooks.json`
+
+### Changed
+
+- Cascade/map/rules sync; package `0.3.0`
+
+## [0.2.0] - 2026-08-27
+
+### Added
+
+- Agents context
+
+### Changed
+
+- Slim agent prompts; max permissions
+
+## [0.1.0] - 2026-08-26
+
+First published tag. No `v0.0.x`.
+
+### Added
+
+- `@lovrozagar/grunt` npm package: deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo (`npx @lovrozagar/grunt` / `init`)
+- Host emit matrix: Grok, Claude Code, Codex, Antigravity; Gemini CLI tracked as a generate gap
+- Agents: orchestrator (parent) plus grunt / implementer / thinker
+- Product scripts including `grunt-job`, persist-plan, emit-mcp-policy, gate-fat-tools, scrub-spawn-prompt, scrub-text, check-globals, sync-global-settings, purge-global-mcps, and `scripts/telemetry.mjs` NDJSON (present from the first commit)
+- Skills: `explain`, `parent`, `terse`; Grok-only `write-plan` / `implement-plan`
+- GitHub Actions CI and npm `0.1.0` release
+
+### Fixed
+
+- Terse and spawn rules
+
+[0.4.2]: https://github.com/lovrozagar/grunt/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/lovrozagar/grunt/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/lovrozagar/grunt/compare/v0.3.11...v0.4.0
+[0.3.11]: https://github.com/lovrozagar/grunt/compare/v0.3.10...v0.3.11
+[0.3.10]: https://github.com/lovrozagar/grunt/compare/v0.3.9...v0.3.10
+[0.3.9]: https://github.com/lovrozagar/grunt/compare/v0.3.8...v0.3.9
+[0.3.8]: https://github.com/lovrozagar/grunt/compare/v0.3.7...v0.3.8
+[0.3.7]: https://github.com/lovrozagar/grunt/compare/v0.3.6...v0.3.7
+[0.3.6]: https://github.com/lovrozagar/grunt/compare/v0.3.5...v0.3.6
+[0.3.5]: https://github.com/lovrozagar/grunt/compare/v0.3.4...v0.3.5
+[0.3.4]: https://github.com/lovrozagar/grunt/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/lovrozagar/grunt/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/lovrozagar/grunt/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/lovrozagar/grunt/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/lovrozagar/grunt/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/lovrozagar/grunt/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/lovrozagar/grunt/releases/tag/v0.1.0

@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DENY_REASON,
+  ORCHESTRATOR_LOGS_DIR,
   STOP_REASONS,
   isAllowedParentGruntJob,
 } from "../.grok/hooks/orchestrate-parent.js";
 import { VALID_HANDOFF } from "./persist-handoff.test.ts";
 import { VALID_THINKER } from "./persist-plan.test.ts";
-import { ORCHESTRATOR_LOGS_DIR, telemetryPath } from "./telemetry.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -672,83 +672,57 @@ describe("orchestrate-parent Stop", () => {
     expect(JSON.parse(again.stdout).reason).toMatch(/^Spawn:/);
   });
 
-  it("logs parent-stop telemetry without message body", () => {
+  it("parent-stop recap allows; missing recap blocks; stop_hook_active fail-open", () => {
     const ws = workspace();
-    runHook(
+    const ok = runHook(
       {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage: "[orchestrator]: ok",
         workspaceRoot: ws,
-        sessionId: "s-tel-ok",
+        sessionId: "s-stop-ok",
       },
       {
         GROK_HOOK_EVENT: "stop",
         GROK_WORKSPACE_ROOT: ws,
-        GROK_SESSION_ID: "s-tel-ok",
+        GROK_SESSION_ID: "s-stop-ok",
       },
     );
-    runHook(
+    expect(ok.status).toBe(0);
+    expect(ok.stdout).toBe("");
+    const blocked = runHook(
       {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage: "no recap here",
         workspaceRoot: ws,
-        sessionId: "s-tel-block",
+        sessionId: "s-stop-block",
       },
       {
         GROK_HOOK_EVENT: "stop",
         GROK_WORKSPACE_ROOT: ws,
-        GROK_SESSION_ID: "s-tel-block",
+        GROK_SESSION_ID: "s-stop-block",
       },
     );
-    runHook(
+    expect(blocked.status).toBe(0);
+    expect(JSON.parse(blocked.stdout).decision).toBe("block");
+    const sha = runHook(
       {
         hookEventName: "Stop",
         reason: "end_turn",
         stop_hook_active: true,
         lastAssistantMessage: "no recap here",
         workspaceRoot: ws,
-        sessionId: "s-tel-sha",
+        sessionId: "s-stop-sha",
       },
       {
         GROK_HOOK_EVENT: "stop",
         GROK_WORKSPACE_ROOT: ws,
-        GROK_SESSION_ID: "s-tel-sha",
+        GROK_SESSION_ID: "s-stop-sha",
       },
     );
-    const rows = readTelemetry(ws).filter((r) => r.event === "parent-stop");
-    expect(rows.length).toBeGreaterThanOrEqual(3);
-    const ok = rows.find((r) => r.recap === true);
-    expect(ok).toMatchObject({
-      recap: true,
-      recapSource: "payload",
-      failOpen: false,
-      stopHookActive: false,
-    });
-    const blocked = rows.find((r) => r.recap === false && r.stopHookActive === false);
-    expect(blocked).toMatchObject({
-      recap: false,
-      recapSource: "payload",
-      failOpen: false,
-      stopHookActive: false,
-    });
-    expect(blocked.attempt).toBe(1);
-    const sha = rows.find((r) => r.stopHookActive === true);
-    expect(sha).toMatchObject({
-      recap: false,
-      recapSource: "none",
-      failOpen: true,
-      stopHookActive: true,
-    });
-    for (const r of rows) {
-      expect(r).not.toHaveProperty("lastAssistantMessage");
-      expect(r).not.toHaveProperty("message");
-      expect(r).not.toHaveProperty("body");
-      expect(r).not.toHaveProperty("msg");
-      expect(JSON.stringify(r)).not.toMatch(/no recap here/);
-      expect(JSON.stringify(r)).not.toMatch(/\[orchestrator\]: ok/);
-    }
+    expect(sha.status).toBe(0);
+    expect(sha.stdout).toBe("");
   });
 
   it("handoff skill ships to every host from one SSOT", () => {
@@ -1181,16 +1155,6 @@ function plantGruntJob(ws: string) {
   fs.writeFileSync(path.join(ws, "scripts/grunt-job.mjs"), "");
 }
 
-function readTelemetry(ws: string) {
-  const p = telemetryPath(ws);
-  if (!fs.existsSync(p)) return [];
-  return fs
-    .readFileSync(p, "utf8")
-    .split(/\n/)
-    .filter(Boolean)
-    .map((l) => JSON.parse(l));
-}
-
 describe("orchestrate-parent parent grunt-job bash", () => {
   it("denies parent grunt-job --job search and --job exec", () => {
     const ws = workspace();
@@ -1491,8 +1455,8 @@ describe("orchestrate-parent SubagentStop intercept", () => {
   });
 });
 
-describe("orchestrate-parent telemetry", () => {
-  it("spawn logs type; read bytes present; stdout is not the telemetry line", () => {
+describe("orchestrate-parent hook config", () => {
+  it("spawn rewrite and parent read deny still emit JSON", () => {
     const ws = workspace();
     const file = path.join(ws, "small.txt");
     fs.writeFileSync(file, "abc");
@@ -1510,7 +1474,6 @@ describe("orchestrate-parent telemetry", () => {
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
     expect(spawn.status).toBe(0);
-    expect(spawn.stdout).not.toMatch(/telemetry/);
     const spawnJson = JSON.parse(spawn.stdout);
     expect(spawnJson.decision || spawnJson.hookSpecificOutput).toBeTruthy();
     const read = runHook(
@@ -1523,14 +1486,10 @@ describe("orchestrate-parent telemetry", () => {
       { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
     );
     expect(read.status).toBe(0);
-    JSON.parse(read.stdout);
-    const lines = readTelemetry(ws);
-    expect(lines.some((l) => l.spawnType === "implementer")).toBe(true);
-    expect(lines.some((l) => l.resumeFromCount === 1)).toBe(true);
-    expect(lines.some((l) => l.fileSizeBytes === 3)).toBe(true);
+    expect(JSON.parse(read.stdout).decision).toBe("deny");
   });
 
-  it("need ok vs fail; intercept FALLBACK; hook stdout is not the telemetry line", () => {
+  it("need ok vs fail; intercept FALLBACK", () => {
     const ws = workspace();
     fs.writeFileSync(path.join(ws, "hit.txt"), "ok-token-aaa\n");
     const ok = runHook(
@@ -1580,14 +1539,6 @@ describe("orchestrate-parent telemetry", () => {
       },
     );
     expect(fb.stdout).toBe("");
-    const lines = readTelemetry(ws);
-    expect(lines.some((l) => l.parseOk === true && l.intercept === "grunt-job")).toBe(
-      true,
-    );
-    expect(lines.some((l) => l.parseOk === false && l.intercept === "none")).toBe(
-      true,
-    );
-    expect(lines.some((l) => l.intercept === "FALLBACK")).toBe(true);
   });
 
   it("orchestrate-parent.json still has no SessionStart", () => {
