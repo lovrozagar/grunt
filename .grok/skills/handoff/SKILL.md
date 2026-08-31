@@ -46,7 +46,7 @@ Headings, this order only: `# {slug}`, `## Goal`, `## State`, `## Context`, `## 
 | Section | Amount |
 |---|---|
 | Goal | 1–3 sentences. What the session is trying to land. |
-| State | bullets. Done / changed / green-red, with absolute paths. |
+| State | bullets. Past tense for landed work / changed / green-red, with absolute paths. |
 | Context | bullets. Abs paths, decisions, verdict facts the next session needs. |
 | Next | checkbox steps, `N [ ]` phase + `N.M [ ]` leaf, all `[ ]` fresh |
 | Watch-outs | bullets. Footguns. `(none)` allowed. |

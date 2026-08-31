@@ -3,15 +3,27 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MAX_GUARDED_MARKDOWN_BYTES,
+  composeGuardedMarkdown,
   destAlreadyInited,
+  extractGruntBody,
+  GUARDED_ROOT_FILES,
+  guardedMarkdownDrift,
+  healGuardedRootFile,
   init,
   mergeClaudeSettings,
   mergeGitignore,
+  mergeGuardedContent,
   mergeGuardedMarkdown,
   mergePackageJson,
+  remergeGuardedRoots,
   samePath,
   shouldAutoSkipGlobals,
+  snapshotGuardedRoots,
+  withGuardedCheckInteriors,
+  writeMergedGuardedFile,
 } from "./init.mjs";
+import { runGuardedRoots } from "../scripts/guarded-roots.mjs";
 
 const tmpDirs: string[] = [];
 afterEach(() => {
@@ -32,6 +44,7 @@ const PRODUCT_FILES = [
   "check-globals.mjs",
   "emit-agent-shell-tools.mjs",
   "emit-gemini.mjs",
+  "guarded-roots.mjs",
   "emit-mcp-policy.mjs",
   "gate-fat-tools.mjs",
   "hooks-union.mjs",
@@ -203,22 +216,39 @@ describe("mergeGuardedMarkdown", () => {
     );
   });
 
-  it("dest exists without sentinel: writes CLAUDE.grunt.md, leaves original untouched", () => {
+  it("dest exists without sentinel: prepends wrapped grunt, keeps full old body", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("md-nosentinel-");
     fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
     expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
-      "hand-written consumer doc\n",
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
     );
-    expect(fs.readFileSync(path.join(dest, "CLAUDE.grunt.md"), "utf8")).toBe("CLAUDE.md content");
-    expect(logSpy).toHaveBeenCalledTimes(1);
-    expect(logSpy.mock.calls[0][0]).toContain("CLAUDE.grunt.md");
-    logSpy.mockRestore();
+    expect(fs.existsSync(path.join(dest, "CLAUDE.grunt.md"))).toBe(false);
   });
 
-  it("dest exists with sentinel: replaces only the marked region", () => {
+  it("alreadyInited unmarked still prepends; skip is not safe", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-inited-nosent-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md", { alreadyInited: true });
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
+    );
+    expect(fs.existsSync(path.join(dest, "CLAUDE.grunt.md"))).toBe(false);
+  });
+
+  it("empty dest file is treated as missing", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-empty-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\n",
+    );
+  });
+
+  it("dest exists with sentinel: grunt block at top, outside kept at bottom", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("md-sentinel-");
     fs.writeFileSync(
@@ -227,9 +257,367 @@ describe("mergeGuardedMarkdown", () => {
     );
     mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
     expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
-      "before\n<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nafter\n",
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nbefore\nafter\n",
     );
     expect(fs.existsSync(path.join(dest, "CLAUDE.grunt.md"))).toBe(false);
+  });
+
+  it("collapses duplicate sentinel pairs to one top block", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-dup-sent-");
+    fs.writeFileSync(
+      path.join(dest, "CLAUDE.md"),
+      "<!-- grunt:begin -->\nold-a\n<!-- grunt:end -->\nkeep-a\n<!-- grunt:begin -->\nold-b\n<!-- grunt:end -->\nkeep-b\n",
+    );
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    const out = fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8");
+    expect(out).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nkeep-a\nkeep-b\n",
+    );
+    expect(out.split("<!-- grunt:begin -->")).toHaveLength(2);
+  });
+
+  it("second merge is idempotent and does not double-prepend", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-idem-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
+    );
+  });
+
+  it("does not fuzzy-dedupe unmarked protocol-looking user text", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-proto-");
+    const user = "Voice: `.rulesync/reference/output.md` — cite once.\nspawn grunt\n";
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), user);
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      `<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\n${user}`,
+    );
+  });
+
+  it("preserves CRLF from dest", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-crlf-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "user line\r\n");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\r\nCLAUDE.md content\r\n<!-- grunt:end -->\r\nuser line\r\n",
+    );
+  });
+
+  it("unmarked dest equal to grunt body wraps without duplicating", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-equal-");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "CLAUDE.md content\n");
+    mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\n",
+    );
+  });
+
+  it("binary dest is left untouched", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-bin-");
+    const raw = Buffer.from([0x68, 0x69, 0x00, 0xff]);
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), raw);
+    expect(mergeGuardedMarkdown(dest, pkgRoot, "CLAUDE.md")).toBe("aborted-unsafe");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"))).toEqual(raw);
+  });
+
+  it("leaves nested AGENTS.md alone", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("md-nested-");
+    fs.mkdirSync(path.join(dest, "pkg"), { recursive: true });
+    fs.writeFileSync(path.join(dest, "pkg", "AGENTS.md"), "nested user\n");
+    mergeGuardedMarkdown(dest, pkgRoot, "AGENTS.md");
+    expect(fs.readFileSync(path.join(dest, "pkg", "AGENTS.md"), "utf8")).toBe("nested user\n");
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nAGENTS.md content\n<!-- grunt:end -->\n",
+    );
+  });
+});
+
+describe("snapshot/remerge guarded roots", () => {
+  it("remerge after clobber keeps user bottom and refreshes grunt interior", () => {
+    const dest = tmp("snap-clobber-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\nconsumer agents\n",
+    );
+    fs.writeFileSync(path.join(dest, "GEMINI.md"), "user gemini\n");
+    const snap = snapshotGuardedRoots(dest);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "generated agents\n");
+    fs.writeFileSync(path.join(dest, "GEMINI.md"), "@AGENTS.md\n");
+    remergeGuardedRoots(dest, snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\ngenerated agents\n<!-- grunt:end -->\nconsumer agents\n",
+    );
+    expect(fs.readFileSync(path.join(dest, "GEMINI.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\n@AGENTS.md\n<!-- grunt:end -->\nuser gemini\n",
+    );
+  });
+
+  it("withGuardedCheckInteriors is restored even if check throws", () => {
+    const dest = tmp("check-int-");
+    const live =
+      "<!-- grunt:begin -->\ngrunt body\n<!-- grunt:end -->\nuser bottom\n";
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), live);
+    expect(() =>
+      withGuardedCheckInteriors(dest, () => {
+        expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("grunt body\n");
+        throw new Error("check failed");
+      }),
+    ).toThrow("check failed");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(live);
+  });
+
+  it("compose/extract/drift/write helpers cover remaining branches", () => {
+    expect(composeGuardedMarkdown("body", null)).toBe(
+      "<!-- grunt:begin -->\nbody\n<!-- grunt:end -->\n",
+    );
+    expect(composeGuardedMarkdown("body", "\n\n")).toBe(
+      "<!-- grunt:begin -->\nbody\n<!-- grunt:end -->\n",
+    );
+    expect(extractGruntBody("no markers")).toBeNull();
+    expect(
+      extractGruntBody(
+        "<!-- grunt:begin -->\na\n<!-- grunt:end -->\n<!-- grunt:begin -->\nb\n<!-- grunt:end -->\n",
+      ),
+    ).toBe("a\nb");
+    expect(mergeGuardedContent(null, "g")).toBe(
+      "<!-- grunt:begin -->\ng\n<!-- grunt:end -->\n",
+    );
+    expect(mergeGuardedContent("", "a\r\nb")).toBe(
+      "<!-- grunt:begin -->\r\na\r\nb\r\n<!-- grunt:end -->\r\n",
+    );
+    expect(composeGuardedMarkdown("b", "\r\n")).toBe(
+      "<!-- grunt:begin -->\nb\n<!-- grunt:end -->\n",
+    );
+    expect(mergeGuardedContent("keep\n", "g\r\n")).toBe(
+      "<!-- grunt:begin -->\ng\n<!-- grunt:end -->\nkeep\n",
+    );
+    expect(mergeGuardedContent("<!-- grunt:begin --> only", "g")).toContain("only");
+    const dest = tmp("md-helpers-");
+    const missing = path.join(dest, "nope.md");
+    expect(guardedMarkdownDrift(missing, "g")).toBe(true);
+    writeMergedGuardedFile(missing, "g");
+    expect(fs.readFileSync(missing, "utf8")).toBe(
+      "<!-- grunt:begin -->\ng\n<!-- grunt:end -->\n",
+    );
+    expect(guardedMarkdownDrift(missing, "g")).toBe(false);
+    expect(guardedMarkdownDrift(missing, "other")).toBe(true);
+    fs.writeFileSync(missing, "plain\n");
+    expect(guardedMarkdownDrift(missing, "plain\n")).toBe(false);
+    expect(guardedMarkdownDrift(missing, "x")).toBe(true);
+    const bin = path.join(dest, "bin.md");
+    fs.writeFileSync(bin, Buffer.from([0]));
+    expect(guardedMarkdownDrift(bin, "g")).toBe(true);
+    const huge = path.join(dest, "huge.md");
+    fs.writeFileSync(huge, Buffer.alloc(MAX_GUARDED_MARKDOWN_BYTES + 1, 65));
+    expect(writeMergedGuardedFile(huge, "g")).toBe("aborted-unsafe");
+  });
+
+  it("remerge restores unsafe, missing, binary current, and created files", () => {
+    const dest = tmp("remerge-edges-");
+    const agents = path.join(dest, "AGENTS.md");
+    const claude = path.join(dest, "CLAUDE.md");
+    const gemini = path.join(dest, "GEMINI.md");
+    const rawBuf = Buffer.from([0x41, 0x00]);
+    fs.writeFileSync(agents, rawBuf);
+    fs.writeFileSync(claude, "keep claude\n");
+    const snap = snapshotGuardedRoots(dest);
+    expect(snap["AGENTS.md"].unsafe).toBe("binary");
+    fs.writeFileSync(agents, "clobbered\n");
+    fs.rmSync(claude);
+    fs.writeFileSync(gemini, "@AGENTS.md\n");
+    const binClaude = path.join(dest, "CLAUDE.md");
+    remergeGuardedRoots(dest, snap);
+    expect(fs.readFileSync(agents)).toEqual(rawBuf);
+    expect(fs.readFileSync(claude, "utf8")).toBe("keep claude\n");
+    expect(fs.readFileSync(gemini, "utf8")).toBe(
+      "<!-- grunt:begin -->\n@AGENTS.md\n<!-- grunt:end -->\n",
+    );
+    fs.writeFileSync(claude, Buffer.from([0x00]));
+    remergeGuardedRoots(dest, snap);
+    expect(fs.readFileSync(binClaude, "utf8")).toBe("keep claude\n");
+    remergeGuardedRoots(dest, {});
+    fs.writeFileSync(gemini, Buffer.from([0x00]));
+    remergeGuardedRoots(dest, {});
+    expect(fs.readFileSync(gemini)).toEqual(Buffer.from([0x00]));
+    fs.rmSync(gemini);
+    remergeGuardedRoots(dest, {});
+    expect(fs.existsSync(gemini)).toBe(false);
+  });
+
+  it("remerge clears user when unmarked snap equals new grunt body", () => {
+    const dest = tmp("remerge-eq-");
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "same\n");
+    const snap = snapshotGuardedRoots(dest);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "same\n");
+    remergeGuardedRoots(dest, snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe("same\n");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nsame\n<!-- grunt:end -->\n",
+    );
+    remergeGuardedRoots(dest, snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nsame\n<!-- grunt:end -->\n",
+    );
+  });
+
+  it("withGuardedCheckInteriors skips unmarked and unsafe then restores", () => {
+    const dest = tmp("check-skip-");
+    const live = "plain user\n";
+    const rawBuf = Buffer.from([0x00, 0x01]);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), live);
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), rawBuf);
+    const ret = withGuardedCheckInteriors(dest, () => {
+      expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(live);
+      expect(fs.readFileSync(path.join(dest, "CLAUDE.md"))).toEqual(rawBuf);
+      return 7;
+    });
+    expect(ret).toBe(7);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(live);
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"))).toEqual(rawBuf);
+  });
+
+  it("runGuardedRoots generate rematches after inner clobber", () => {
+    const dest = tmp("guarded-run-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\nkeep me\n",
+    );
+    const exec = vi.fn(() => {
+      fs.writeFileSync(path.join(dest, "AGENTS.md"), "fresh ssot\n");
+    });
+    runGuardedRoots("generate", { cwd: dest, exec });
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(String(exec.mock.calls[0][0])).toContain("rulesync:generate:raw");
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nfresh ssot\n<!-- grunt:end -->\nkeep me\n",
+    );
+  });
+
+  it("healGuardedRootFile rematches unmarked clobber and keeps later user edits", () => {
+    const dest = tmp("heal-watch-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\nkeep me\n",
+    );
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "user claude\n");
+    const snap = snapshotGuardedRoots(dest);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "watch gen 1\n");
+    healGuardedRootFile(dest, "AGENTS.md", snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nwatch gen 1\n<!-- grunt:end -->\nkeep me\n",
+    );
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nwatch gen 1\n<!-- grunt:end -->\nedited bottom\n",
+    );
+    healGuardedRootFile(dest, "AGENTS.md", snap);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "watch gen 2\n");
+    healGuardedRootFile(dest, "AGENTS.md", snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nwatch gen 2\n<!-- grunt:end -->\nedited bottom\n",
+    );
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "watch claude\n");
+    healGuardedRootFile(dest, "CLAUDE.md", snap);
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nwatch claude\n<!-- grunt:end -->\nuser claude\n",
+    );
+    healGuardedRootFile(dest, "README.md", snap);
+    expect(GUARDED_ROOT_FILES).toEqual(["AGENTS.md", "CLAUDE.md", "GEMINI.md"]);
+    const eq = tmp("heal-eq-");
+    fs.writeFileSync(path.join(eq, "AGENTS.md"), "same\n");
+    const eqSnap = snapshotGuardedRoots(eq);
+    healGuardedRootFile(eq, "AGENTS.md", eqSnap);
+    expect(fs.readFileSync(path.join(eq, "AGENTS.md"), "utf8")).toBe("same\n");
+    fs.writeFileSync(path.join(eq, "AGENTS.md"), "same");
+    healGuardedRootFile(eq, "AGENTS.md", eqSnap);
+    expect(fs.readFileSync(path.join(eq, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nsame\n<!-- grunt:end -->\n",
+    );
+    fs.writeFileSync(path.join(eq, "GEMINI.md"), "@AGENTS.md\n");
+    healGuardedRootFile(eq, "GEMINI.md", {});
+    expect(fs.readFileSync(path.join(eq, "GEMINI.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\n@AGENTS.md\n<!-- grunt:end -->\n",
+    );
+  });
+
+  it("healGuardedRootFile restores unsafe clobber and ignores missing", () => {
+    const dest = tmp("heal-unsafe-");
+    const rawBuf = Buffer.from([0x00, 0x02]);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), rawBuf);
+    const snap = snapshotGuardedRoots(dest);
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "clobbered\n");
+    healGuardedRootFile(dest, "AGENTS.md", snap);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"))).toEqual(rawBuf);
+    healGuardedRootFile(dest, "GEMINI.md", snap);
+    expect(fs.existsSync(path.join(dest, "GEMINI.md"))).toBe(false);
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "ok\n");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), Buffer.from([0x00]));
+    const snap2 = snapshotGuardedRoots(dest);
+    snap2["CLAUDE.md"] = { raw: "ok\n", user: "ok\n" };
+    healGuardedRootFile(dest, "CLAUDE.md", snap2);
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("ok\n");
+    fs.writeFileSync(path.join(dest, "GEMINI.md"), Buffer.from([0x00]));
+    healGuardedRootFile(dest, "GEMINI.md", {});
+    expect(fs.readFileSync(path.join(dest, "GEMINI.md"))).toEqual(Buffer.from([0x00]));
+  });
+
+  it("runGuardedRoots watch rematches after each inner clobber", () => {
+    const dest = tmp("guarded-watch-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\nkeep me\n",
+    );
+    let heal;
+    const exec = vi.fn(() => {
+      fs.writeFileSync(path.join(dest, "AGENTS.md"), "watch1\n");
+      heal("AGENTS.md");
+      expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+        "<!-- grunt:begin -->\nwatch1\n<!-- grunt:end -->\nkeep me\n",
+      );
+      fs.writeFileSync(path.join(dest, "AGENTS.md"), "watch2\n");
+      heal("AGENTS.md");
+    });
+    const stop = vi.fn();
+    runGuardedRoots("watch", {
+      cwd: dest,
+      exec,
+      attachWatchers: ({ heal: h }) => {
+        heal = h;
+        return stop;
+      },
+    });
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(String(exec.mock.calls[0][0])).toContain("rulesync:watch:raw");
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nwatch2\n<!-- grunt:end -->\nkeep me\n",
+    );
+  });
+
+  it("runGuardedRoots watch default watchers still rematch on exit", () => {
+    const dest = tmp("guarded-watch-def-");
+    fs.writeFileSync(
+      path.join(dest, "AGENTS.md"),
+      "<!-- grunt:begin -->\nold\n<!-- grunt:end -->\nkeep me\n",
+    );
+    const exec = vi.fn(() => {
+      fs.writeFileSync(path.join(dest, "AGENTS.md"), "from-watch\n");
+    });
+    runGuardedRoots("watch", { cwd: dest, exec });
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nfrom-watch\n<!-- grunt:end -->\nkeep me\n",
+    );
+    expect(() => runGuardedRoots("nope")).toThrow(/generate\|check\|watch/);
   });
 });
 
@@ -781,7 +1169,7 @@ describe("init", () => {
     ]);
   });
 
-  it("re-run without sentinel does not create/overwrite *.grunt.md", () => {
+  it("re-run alreadyInited unmarked still merges live files; stale *.grunt.md unused", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("grunt-rerun-nosent-");
     fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
@@ -790,34 +1178,67 @@ describe("init", () => {
     fs.writeFileSync(path.join(dest, "scripts", "telemetry.mjs"), "existing");
     fs.writeFileSync(path.join(dest, "CLAUDE.grunt.md"), "stale side");
     const exec = vi.fn();
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     init(dest, { pkgRoot, execFileSync: exec });
-    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("hand-written consumer doc\n");
-    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe("hand-written consumer doc\n");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
+    );
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nAGENTS.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
+    );
     expect(fs.readFileSync(path.join(dest, "CLAUDE.grunt.md"), "utf8")).toBe("stale side");
     expect(fs.existsSync(path.join(dest, "AGENTS.grunt.md"))).toBe(false);
-    expect(logSpy.mock.calls.filter((c) => String(c[0]).includes("lack markers"))).toHaveLength(1);
-    logSpy.mockRestore();
   });
 
-  it("first init without sentinel still creates *.grunt.md", () => {
+  it("first init without sentinel prepends grunt and keeps user bottom", () => {
     const pkgRoot = stubPkgRoot();
     const dest = tmp("grunt-first-nosent-");
     fs.writeFileSync(path.join(dest, "CLAUDE.md"), "hand-written consumer doc\n");
     fs.writeFileSync(path.join(dest, "AGENTS.md"), "hand-written consumer doc\n");
     const exec = vi.fn();
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     init(dest, { pkgRoot, execFileSync: exec });
-    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe("hand-written consumer doc\n");
-    expect(fs.readFileSync(path.join(dest, "CLAUDE.grunt.md"), "utf8")).toBe("CLAUDE.md content");
-    expect(fs.readFileSync(path.join(dest, "AGENTS.grunt.md"), "utf8")).toBe("AGENTS.md content");
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nCLAUDE.md content\n<!-- grunt:end -->\nhand-written consumer doc\n",
+    );
+    expect(fs.existsSync(path.join(dest, "CLAUDE.grunt.md"))).toBe(false);
+    expect(fs.existsSync(path.join(dest, "AGENTS.grunt.md"))).toBe(false);
     expect(exec.mock.calls.map((c) => c[1])).toEqual([
       ["install"],
       ["run", "rulesync:generate"],
       ["run", "sync:globals:apply"],
       ["run", "rulesync:check"],
     ]);
-    logSpy.mockRestore();
+  });
+
+  it("generate clobber after merge keeps user bottom (idempotent re-init)", () => {
+    const pkgRoot = stubPkgRoot();
+    const dest = tmp("grunt-gen-clobber-");
+    fs.writeFileSync(path.join(dest, "AGENTS.md"), "consumer agents\n");
+    fs.writeFileSync(path.join(dest, "CLAUDE.md"), "consumer claude\n");
+    fs.writeFileSync(path.join(dest, "GEMINI.md"), "consumer gemini\n");
+    const exec = vi.fn((_cmd, args) => {
+      if (Array.isArray(args) && args.includes("rulesync:generate")) {
+        fs.writeFileSync(path.join(dest, "AGENTS.md"), "generated agents\n");
+        fs.writeFileSync(path.join(dest, "CLAUDE.md"), "generated claude\n");
+        fs.writeFileSync(path.join(dest, "GEMINI.md"), "@AGENTS.md\n");
+      }
+    });
+    init(dest, { pkgRoot, execFileSync: exec });
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\ngenerated agents\n<!-- grunt:end -->\nconsumer agents\n",
+    );
+    expect(fs.readFileSync(path.join(dest, "CLAUDE.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\ngenerated claude\n<!-- grunt:end -->\nconsumer claude\n",
+    );
+    expect(fs.readFileSync(path.join(dest, "GEMINI.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\n@AGENTS.md\n<!-- grunt:end -->\nconsumer gemini\n",
+    );
+    init(dest, { pkgRoot, execFileSync: vi.fn() });
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
+      "<!-- grunt:begin -->\nAGENTS.md content\n<!-- grunt:end -->\nconsumer agents\n",
+    );
+    expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8").split("consumer agents").length).toBe(
+      2,
+    );
   });
 
   it("onPhase merge then npm phases stop before exec", () => {

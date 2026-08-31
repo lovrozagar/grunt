@@ -20,4 +20,4 @@ Claude/Codex/Grok: `/solo` via submit hook writes `.tmp/orchestrator-logs/grunt-
 
 This is the only session-wide spawn-workflow escape. /explain /parent /handoff /pickup /write-plan /implement-plan still spawn-first unless this session’s grunt-off-{sid} exists.
 
-For advisory/design turns, debugging the cascade itself, or back-and-forth where spawning costs more than it saves.
+Spawn-escape only. Not advisory/design routing.

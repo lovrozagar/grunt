@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { guardedMarkdownDrift, writeMergedGuardedFile } from "../cli/init.mjs";
 
 export const AGENT_IDS = ["orchestrator", "implementer", "thinker", "grunt"];
 const SSOT_REL = ".rulesync/subagents";
@@ -173,6 +174,10 @@ export function emitGemini({ workspaceRoot, check = false } = {}) {
   if (check) {
     const drift = [];
     for (const f of files) {
+      if (f.rel === GEMINI_MD_REL) {
+        if (guardedMarkdownDrift(path.join(ws, f.rel), f.text)) drift.push(f.rel);
+        continue;
+      }
       const disk = readText(path.join(ws, f.rel));
       if (disk !== f.text) drift.push(f.rel);
     }
@@ -185,7 +190,8 @@ export function emitGemini({ workspaceRoot, check = false } = {}) {
   for (const f of files) {
     const abs = path.join(ws, f.rel);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, f.text);
+    if (f.rel === GEMINI_MD_REL) writeMergedGuardedFile(abs, f.text);
+    else fs.writeFileSync(abs, f.text);
   }
   return { ok: true, check: false };
 }

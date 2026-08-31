@@ -34,9 +34,9 @@ import { logTelemetry, ORCHESTRATOR_LOGS_DIR } from "../../scripts/telemetry.mjs
 export const DENY_REASON =
   "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
-  "Spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
-  "Still spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
-  "Last spawn: ⚠/validate/sim findings or writes remain or parent just tried to Write → spawn implementer. Else facts → grunt. Else large/complex + no spec → thinker. Else small/simple/defined → implementer. Else recap `[orchestrator]:` one-line.",
+  "Spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
+  "Still spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
+  "Last spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
@@ -381,15 +381,27 @@ function userPromptSubmit(data) {
 
 const RECAP_TAG_RE =
   /^\[(?:orchestrator|grunt|implementer|thinker|handoff)\]:/;
+const WAIT_GRUNT = "[orchestrator]: wait grunt";
+
+function firstNonEmptyStripped(msg) {
+  for (const line of String(msg || "").split("\n")) {
+    if (!line.trim()) continue;
+    return line.replace(/^[\s`*_>]+/, "");
+  }
+  return "";
+}
 
 export function isRecap(msg) {
-  const lines = String(msg || "").split("\n");
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const stripped = line.replace(/^[\s`*_>]+/, "");
-    return RECAP_TAG_RE.test(stripped);
-  }
-  return false;
+  return RECAP_TAG_RE.test(firstNonEmptyStripped(msg));
+}
+
+/** Mid-turn wait must be exactly `[orchestrator]: wait grunt` (no leftover lines). */
+export function isWaitGruntExact(msg) {
+  const nonempty = String(msg || "")
+    .split("\n")
+    .filter((l) => l.trim());
+  if (nonempty.length !== 1) return false;
+  return nonempty[0].replace(/^[\s`*_>]+/, "") === WAIT_GRUNT;
 }
 
 function payloadAssistantMessage(data) {
@@ -511,7 +523,10 @@ function stop(data) {
     if (msg) recapSource = "transcript";
   }
 
-  if (isRecap(msg)) {
+  const waitFirst = firstNonEmptyStripped(msg) === WAIT_GRUNT;
+  if (waitFirst && !isWaitGruntExact(msg)) {
+    // fall through to block — leftover lines not allowed on mid-turn wait
+  } else if (isRecap(msg)) {
     logParentStop(data, {
       recap: true,
       recapSource,

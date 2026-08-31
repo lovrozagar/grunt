@@ -105,10 +105,10 @@ SoT: `.rulesync/subagents/{orchestrator grunt implementer thinker}.md`
 
 Emit: `.claude/` `.grok/` `.agents/` `.gemini/`
 
-- **orchestrator** (parent) — always spawn+prompt; user-facing only `[orchestrator]:` (or child role tag) one-line echo. `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
+- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap (do not cram `1. Implement 2. Tweak` onto the recap line). `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
 - **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation `verdict:`. Never feature solution. Never spawn. World fact: `job: web`
 - **implementer** — write already-defined solution on allowlisted paths. TDD when spec/plan says tests. Validate + sim after write. Fat dumps via `need:`. Never spawn. Never plan. Id is **implementer** (not Implementor)
-- **thinker** — plan/deep reason; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
+- **thinker** — think/plan/advise/recommend/how/why/explain; unsure→thinker; cheap false+; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
 
 Children never spawn. Spawn only grunt|implementer|thinker. Omit model on spawn; frontmatter on agent files picks haiku/sonnet/opus vs grok-4.5 / grok-4.6 / other hosts. Voice: `.rulesync/reference/output.md`. Protocol: `.rulesync/reference/cascade.md`. `AGENTS.md`/`CLAUDE.md` spawn-first. `GEMINI.md` → `@AGENTS.md`. Goals: synced configs across grok build claude code codex gemini cli antigravity; max situational speed; superterse token savings; max/min reasoning by role.
 
@@ -123,7 +123,7 @@ Lightpanda-first session CLI: `node scripts/browser.mjs nav|snap|click|fill|shot
 Present under `.claude` / `.rulesync` / `.agents`:
 
 - `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo`
-- Grok-only: `write-plan` `implement-plan` (`/write-plan` plan-only → `next: /implement-plan`)
+- Grok-only: `write-plan` `implement-plan` (`/write-plan` plan-only → `next: /implement-plan`; advise unlock = pick **1. Implement**, not `ok`/`yes`/`go`; slash `/implement-plan` still valid alias)
 
 ## Generate
 
@@ -162,7 +162,7 @@ Same topology as the session recap; every legal edge labeled.
 ```
  USER
   │
-  │  session in/out  (parent only; tagged one-line recap)
+  │  session in/out  (parent only; tagged one-line recap; advise leftover 1./2. own lines)
   │  TUI local; completion tokens from Model API (mixed)
   ▼
 ┌──────────────────────── CLI HOST (this process) ────────────────────────┐
@@ -251,7 +251,7 @@ Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON l
 | node | inside host? | local vs AI-server | notes |
 | --- | --- | --- | --- |
 | User | no | mixed | Speaks only to parent session. Never a child edge. |
-| Session in/out / TUI | yes | mixed | TUI is local; recap tokens come from the model. Legal `[role]:` one-line echo only. |
+| Session in/out / TUI | yes | mixed | TUI is local; recap tokens come from the model. Legal `[role]:` one-line recap; advise leftover numbered pick each on own line after (not crammed onto the recap line). |
 | CLI host process | yes (is the box) | local process | Grok Build / Claude Code / Codex / Gemini / Antigravity. Not a peer of another CLI. |
 | Parent orchestrator | yes | AI-server **turn** | Spawn-first low router. No parent Read/Bash/Grep. Lives in this session, not a sidecar. |
 | `grunt` sibling | yes | AI-server **turn** | Facts/tools/mechanical write. Never spawn. Never feature solution. |
@@ -349,7 +349,7 @@ npm i && npm test
 
 Keep these four flows only:
 
-1. “Create me a react weather app” → thinker plan → implementer write → orchestrator recap
+1. “Create me a react weather app” → thinker plan/recap-stop + pick 1.Implement 2.Tweak → user picks 1 or `/implement-plan` → implementer write → recap
 2. “What is 2+2” → grunt → `[grunt]:` echo
 3. Marvel theatrical next → grunt `job:web` → recap
 4. `.logs` 3/6/2021 tag `framework bug` → grunt local search → recap

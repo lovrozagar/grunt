@@ -405,6 +405,66 @@ describe("orchestrate-parent Stop", () => {
     expect(reasons[2]).toMatch(/^Last spawn:/);
   });
 
+  it("allows tagged recap plus advise leftover numbered pick", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage:
+          "[orchestrator]: advise stop\n1. Implement\n2. Tweak",
+        workspaceRoot: ws,
+        sessionId: "s-advise-leftover",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-advise-leftover",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("blocks [orchestrator]: wait grunt with leftover lines", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage:
+          "[orchestrator]: wait grunt\n1. Implement\n2. Tweak",
+        workspaceRoot: ws,
+        sessionId: "s-wait-leftover",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-wait-leftover",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).decision).toBe("block");
+  });
+
+  it("parent SSOT un-cramps advise 1./2. onto own lines", () => {
+    const files = [
+      ".rulesync/reference/output.md",
+      ".rulesync/reference/cascade.md",
+      ".rulesync/subagents/orchestrator.md",
+      ".rulesync/rules/overview.md",
+      ".rulesync/rules/CLAUDE.md",
+    ];
+    for (const rel of files) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(text).not.toMatch(/Advise finals: 1\. Implement 2\. Tweak/);
+      expect(text).not.toMatch(
+        /Advise finals end with numbered pick: 1\. Implement 2\. Tweak/,
+      );
+      expect(text).toMatch(/1\. Implement\n2\. Tweak/);
+    }
+  });
+
   it("allows [orchestrator]: wait grunt", () => {
     const ws = workspace();
     const result = runHook(

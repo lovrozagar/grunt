@@ -27,6 +27,7 @@
     "scripts/check-globals.mjs",
     "scripts/emit-agent-shell-tools.mjs",
     "scripts/emit-gemini.mjs",
+    "scripts/guarded-roots.mjs",
     "scripts/emit-mcp-policy.mjs",
     "scripts/gate-fat-tools.mjs",
     "scripts/hooks-union.mjs",
@@ -61,9 +62,12 @@
     "@clack/prompts": "^0.11.0"
   },
   "scripts": {
-    "rulesync:generate": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && node scripts/hooks-union.mjs",
-    "rulesync:watch": "node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills --watch",
-    "rulesync:check": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,skills --check && rulesync generate -t codexcli,antigravity-cli,grokcli -f subagents --check && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks --check && node scripts/emit-mcp-policy.mjs --check && node scripts/emit-gemini.mjs --check && node scripts/emit-agent-shell-tools.mjs --check && node scripts/check-globals.mjs && node scripts/hooks-union.mjs --check",
+    "rulesync:generate": "node ./scripts/guarded-roots.mjs generate",
+    "rulesync:generate:raw": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks && node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && node scripts/hooks-union.mjs",
+    "rulesync:watch": "node ./scripts/guarded-roots.mjs watch",
+    "rulesync:watch:raw": "node scripts/emit-mcp-policy.mjs && node scripts/emit-gemini.mjs && node scripts/emit-agent-shell-tools.mjs && rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills --watch",
+    "rulesync:check": "node ./scripts/guarded-roots.mjs check",
+    "rulesync:check:raw": "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,skills --check && rulesync generate -t codexcli,antigravity-cli,grokcli -f subagents --check && rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks --check && node scripts/emit-mcp-policy.mjs --check && node scripts/emit-gemini.mjs --check && node scripts/emit-agent-shell-tools.mjs --check && node scripts/check-globals.mjs && node scripts/hooks-union.mjs --check",
     "hooks:union": "node scripts/hooks-union.mjs",
     "hooks:check": "node scripts/hooks-union.mjs --check",
     "doctor": "node ./scripts/doctor.mjs",
