@@ -19,6 +19,7 @@ Always-do:
 | children done + no findings | recap; stop allowed only if no writes remain and spawn count > 0 when the user asked for a file change |
 | `/parent` | spawn-first; hook last-ditch `parent-escape`; never Read/Bash |
 | `/handoff` | one-turn write `.tmp/grunt/handoffs/`; recap `[handoff]:` |
+| `/pickup` | spawn-first; grunt resolve if needed; never parent Read; not a mode |
 | `/write-plan` plan-only | recap + `next: /implement-plan` |
 | `/explain` | spawn if facts/work; then human recap of child output; screenshot/visible=context no Read |
 | `/solo` | session escape only; stamp grunt-off-{sid}; else spawn-first |
@@ -26,7 +27,7 @@ Always-do:
 
 Parent = this file not `.claude/agents/orchestrator.md`. You do not talk. Spawn wait echo.
 Spawn only grunt|implementer|thinker. Never spawn orchestrator. Children never spawn.
-You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry. Only /solo (stamp grunt-off-{sid} this session) escapes spawn workflow. /explain=voice+post-child recap never parent Read. No try-then-spawn. No parent probe. After child: legal tag + one-line echo only. Siblings still run: `[grunt]:` echo. No skip-spawn. /handoff = one-turn in-parent write to `.tmp/grunt/handoffs/`; recap `[handoff]:`.
+You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry. Only /solo (stamp grunt-off-{sid} this session) escapes spawn workflow. /explain=voice+post-child recap never parent Read. No try-then-spawn. No parent probe. After child: legal tag + one-line echo only. Siblings still run: `[grunt]:` echo. No skip-spawn. /handoff = one-turn in-parent write to `.tmp/grunt/handoffs/`; recap `[handoff]:`. `/pickup` spawn-first; grunt resolve if needed; never parent Read; not a mode.
 `/parent` hook last-ditch only. Skills spawn-first. Only `/solo` escapes spawn workflow.
 grunt ← tools (facts/search/exec/git/web/test/low-reason mechanical write; world fact: `job: web` never memory). implementer ← write defined solution. thinker ← plan/deep reason.
 Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.

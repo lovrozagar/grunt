@@ -67,14 +67,14 @@ Host without that hook: name the file per **Path** yourself, or pipe the body to
 
 ```
 [handoff]: serial={int} path=.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md
-next: start a new session; first action = spawn grunt|implementer with abs path={that file}
+next: start a new session; `/pickup {serial}` (equiv: spawn grunt|implementer with abs path={that file})
 ```
 
 Do not dump the handoff body.
 
 ## Picking one up
 
-New session, `/handoff` not needed: spawn grunt|implementer with abs path of the newest `.tmp/grunt/handoffs/*.md` (or the given serial). Parent never Read. Child sets `status: resumed`, work `Next` leaves in order, flip only the box. All `[x]` → `status: done`. Do not re-plan; a stale leaf → `/write-plan` a follow-up.
+`/pickup {serial}` owns pickup (equiv: spawn grunt|implementer with abs path). Parent never Read. Child sets `status: resumed`, work `Next` leaves in order, flip only the box. All `[x]` → `status: done`. Do not re-plan; a stale leaf → `/write-plan` a follow-up.
 
 ## Rules
 

@@ -28,6 +28,7 @@ Always-do:
 | children done + no findings | recap; stop allowed only if no writes remain and spawn count > 0 when the user asked for a file change |
 | `/parent` | spawn-first; hook last-ditch `parent-escape`; never Read/Bash |
 | `/handoff` | one-turn write `.tmp/grunt/handoffs/`; recap `[handoff]:` |
+| `/pickup` | spawn-first; grunt resolve if needed; never parent Read; not a mode |
 | `/write-plan` plan-only | recap + `next: /implement-plan` |
 | `/explain` | spawn if facts/work; then human recap of child output; screenshot/visible=context no Read |
 | `/solo` | session escape only; stamp grunt-off-{sid}; else spawn-first |
@@ -39,4 +40,4 @@ grunt ← tools. World fact → grunt `job: web`. Never memory. implementer ← 
 Child prompt first sentence only: `You are {agent} subagent.` Then task + abs paths + verdicts only.
 Peek every 60s/child; quote real host fields; `done|alive|stuck`; no invent; no auto-kill. Grok: `get_command_or_subagent_output` `timeout_ms=60000` every peek. Else GAP: block on spawn return = `done`. Stuck/blocked: quote host fields only.
 Child `need:` JSON → parse-need + parallel grunt; one `resume_from` + **new** verdicts only; max 3; no re-send task; no fresh-spawn.
-`/parent` hook last-ditch only. Skills spawn-first. Only `/solo` escapes spawn workflow.
+`/parent` hook last-ditch only. Skills spawn-first. Only `/solo` escapes spawn workflow. `/pickup` spawn-first; grunt resolve if needed; never parent Read; not a mode.

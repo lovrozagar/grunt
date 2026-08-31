@@ -514,6 +514,10 @@ describe("orchestrate-parent Stop", () => {
       expect(text).toMatch(
         /`\/explain` \| spawn if facts\/work; then human recap of child output; screenshot\/visible=context no Read/,
       );
+      expect(text).toMatch(
+        /`\/pickup` \| spawn-first; grunt resolve if needed; never parent Read; not a mode/,
+      );
+      expect(text).not.toMatch(/resume-handoff/);
     }
     const explain = fs.readFileSync(
       path.join(root, ".rulesync/skills/explain/SKILL.md"),
@@ -698,6 +702,26 @@ describe("orchestrate-parent Stop", () => {
       ".grok/skills/handoff/SKILL.md",
       ".claude/skills/handoff/SKILL.md",
       ".agents/skills/handoff/SKILL.md",
+    ]) {
+      expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
+    expect(ssot).toMatch(/`\/pickup \{serial\}`/);
+    expect(ssot).not.toMatch(/resume-handoff/);
+  });
+
+  it("pickup skill ships to every host from one SSOT", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/pickup/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/^name: pickup$/m);
+    expect(ssot).toMatch(/\/pickup/);
+    expect(ssot).toMatch(/Inverse of \/handoff/);
+    expect(ssot).not.toMatch(/resume-handoff/);
+    for (const rel of [
+      ".grok/skills/pickup/SKILL.md",
+      ".claude/skills/pickup/SKILL.md",
+      ".agents/skills/pickup/SKILL.md",
     ]) {
       expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
     }
@@ -2023,13 +2047,21 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
       toolInput: { skill: "write-plan" },
     });
     expect(JSON.parse(writePlan.stdout)).toMatchObject({ decision: "allow" });
-    for (const skill of ["explain", "parent"]) {
+    for (const skill of ["explain", "parent", "pickup", "handoff"]) {
       const allowed = pre(ws, {
         toolName: "Skill",
         toolInput: { skill },
       });
       expect(JSON.parse(allowed.stdout)).toMatchObject({ decision: "allow" });
     }
+    const alias = pre(ws, {
+      toolName: "Skill",
+      toolInput: { skill: "resume-handoff" },
+    });
+    expect(JSON.parse(alias.stdout)).toMatchObject({
+      decision: "deny",
+      reason: DENY_REASON,
+    });
     const gj = pre(ws, {
       toolName: "Bash",
       toolInput: {

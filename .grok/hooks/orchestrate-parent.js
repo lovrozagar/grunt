@@ -66,6 +66,7 @@ const PARENT_SKILLS = new Set([
   "solo",
   "cascade",
   "handoff",
+  "pickup",
   "write-plan",
   "implement-plan",
 ]);

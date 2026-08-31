@@ -18,6 +18,6 @@ Fat-tool caps stay on — token guards, not cascade.
 
 Claude/Codex/Grok: `/solo` via submit hook writes `.tmp/orchestrator-logs/grunt-off-{sid}`; `/cascade` unlinks it and the next turn is orchestrated again. Agents/Antigravity: instruction-only (this skill body); cannot create stamp via `/solo`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
 
-This is the only session-wide spawn-workflow escape. /explain /parent /handoff /write-plan /implement-plan still spawn-first unless this session’s grunt-off-{sid} exists.
+This is the only session-wide spawn-workflow escape. /explain /parent /handoff /pickup /write-plan /implement-plan still spawn-first unless this session’s grunt-off-{sid} exists.
 
 For advisory/design turns, debugging the cascade itself, or back-and-forth where spawning costs more than it saves.
