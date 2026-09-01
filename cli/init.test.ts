@@ -44,10 +44,12 @@ const PRODUCT_FILES = [
   "check-globals.mjs",
   "emit-agent-shell-tools.mjs",
   "emit-gemini.mjs",
+  "emit-maps.mjs",
   "guarded-roots.mjs",
   "emit-mcp-policy.mjs",
   "gate-fat-tools.mjs",
   "hooks-union.mjs",
+  "pipeline.mjs",
   "grunt-job.mjs",
   "parse-need.mjs",
   "persist-handoff.mjs",
@@ -58,6 +60,7 @@ const PRODUCT_FILES = [
   "sync-global-settings.mjs",
   "browser.mjs",
   "doctor.mjs",
+  "skill-conflicts.mjs",
 ];
 
 const SRC_CLAUDE_SETTINGS = {
@@ -495,8 +498,15 @@ describe("snapshot/remerge guarded roots", () => {
       fs.writeFileSync(path.join(dest, "AGENTS.md"), "fresh ssot\n");
     });
     runGuardedRoots("generate", { cwd: dest, exec });
-    expect(exec).toHaveBeenCalledTimes(1);
-    expect(String(exec.mock.calls[0][0])).toContain("rulesync:generate:raw");
+    expect(exec.mock.calls.map((c) => c[0])).toEqual([
+      "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills",
+      "rulesync generate -t claudecode,codexcli,antigravity-cli -f hooks",
+      "node scripts/emit-mcp-policy.mjs",
+      "node scripts/emit-gemini.mjs",
+      "node scripts/emit-agent-shell-tools.mjs",
+      "node scripts/emit-maps.mjs",
+      "node scripts/hooks-union.mjs",
+    ]);
     expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
       "<!-- grunt:begin -->\nfresh ssot\n<!-- grunt:end -->\nkeep me\n",
     );
@@ -595,8 +605,12 @@ describe("snapshot/remerge guarded roots", () => {
         return stop;
       },
     });
-    expect(exec).toHaveBeenCalledTimes(1);
-    expect(String(exec.mock.calls[0][0])).toContain("rulesync:watch:raw");
+    expect(exec.mock.calls.map((c) => c[0])).toEqual([
+      "node scripts/emit-mcp-policy.mjs",
+      "node scripts/emit-gemini.mjs",
+      "node scripts/emit-agent-shell-tools.mjs",
+      "rulesync generate -t claudecode,codexcli,antigravity-cli,grokcli -f rules,subagents,skills --watch",
+    ]);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
       "<!-- grunt:begin -->\nwatch2\n<!-- grunt:end -->\nkeep me\n",
@@ -952,6 +966,45 @@ describe("mergePackageJson", () => {
     warnSpy.mockRestore();
   });
 
+  it("does not merge :raw scripts from src", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: {
+        "rulesync:generate": "node ./scripts/guarded-roots.mjs generate",
+        "rulesync:generate:raw": "echo raw",
+        "rulesync:check:raw": "echo check-raw",
+        "rulesync:watch:raw": "echo watch-raw",
+      },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-raw-src-");
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe("node ./scripts/guarded-roots.mjs generate");
+    expect(out.scripts["rulesync:generate:raw"]).toBeUndefined();
+    expect(out.scripts["rulesync:check:raw"]).toBeUndefined();
+    expect(out.scripts["rulesync:watch:raw"]).toBeUndefined();
+  });
+
+  it("leaves dest-only :raw keys", () => {
+    const pkgRoot = stubPkgRoot({
+      name: "fixture-pkg",
+      scripts: { "rulesync:generate": "node ./scripts/guarded-roots.mjs generate" },
+      devDependencies: { "smol-toml": "^1.8.0", rulesync: "latest" },
+    });
+    const dest = tmp("pj-raw-dest-");
+    fs.writeFileSync(
+      path.join(dest, "package.json"),
+      JSON.stringify({
+        scripts: { "rulesync:generate:raw": "echo consumer-raw" },
+      }),
+    );
+    mergePackageJson(dest, pkgRoot);
+    const out = JSON.parse(fs.readFileSync(path.join(dest, "package.json"), "utf8"));
+    expect(out.scripts["rulesync:generate"]).toBe("node ./scripts/guarded-roots.mjs generate");
+    expect(out.scripts["rulesync:generate:raw"]).toBe("echo consumer-raw");
+  });
+
   it("replaces a grunt-owned script with no suffix", () => {
     const pkgRoot = stubPkgRoot({
       name: "fixture-pkg",
@@ -1261,6 +1314,30 @@ describe("init", () => {
       ["merge", "start"],
       ["merge", "stop"],
     ]);
+  });
+
+  it("warns when dest skill differs from packaged then force-overwrites; keeps extras", () => {
+    const pkgRoot = stubPkgRoot();
+    const pkgSkill = path.join(pkgRoot, ".rulesync", "skills", "parent");
+    fs.mkdirSync(pkgSkill, { recursive: true });
+    fs.writeFileSync(path.join(pkgSkill, "SKILL.md"), "grunt-parent\n");
+    const dest = tmp("grunt-sk-conflict-");
+    const destSkill = path.join(dest, ".rulesync", "skills", "parent");
+    const destExtra = path.join(dest, ".rulesync", "skills", "my-extra");
+    fs.mkdirSync(destSkill, { recursive: true });
+    fs.mkdirSync(destExtra, { recursive: true });
+    fs.writeFileSync(path.join(destSkill, "SKILL.md"), "custom-parent\n");
+    fs.writeFileSync(path.join(destExtra, "SKILL.md"), "keep-me\n");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    init(dest, { pkgRoot, execFileSync: vi.fn(), skipGlobals: true });
+    expect(
+      warnSpy.mock.calls.some(
+        (c) => String(c[0]).includes("parent") && String(c[0]).includes("re-init overwrites"),
+      ),
+    ).toBe(true);
+    warnSpy.mockRestore();
+    expect(fs.readFileSync(path.join(destSkill, "SKILL.md"), "utf8")).toBe("grunt-parent\n");
+    expect(fs.readFileSync(path.join(destExtra, "SKILL.md"), "utf8")).toBe("keep-me\n");
   });
 });
 

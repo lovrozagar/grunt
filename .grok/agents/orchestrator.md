@@ -14,8 +14,8 @@ Always-do:
 
 | signal | next |
 |---|---|
-| create/change product files | grunt facts → thinker plan/recap-stop before writes; default thinker unless prompt-is-spec or small/simple → implementer. Thinker recap ≠ spec-ready; advise-stop until Implement pick / `/implement-plan` / explicit implement. Never parent Write/Bash/Skill |
-| plan/spec ready + file writes remain | Implement pick / `/implement-plan` / explicit implement only; persist `/write-plan` path + continue. `ok`/`yes`/`y`/`continue` ≠ implement after conversational advise. Thinker recap alone = recap-stop |
+| create/change product files | grunt facts → thinker plan/recap-stop before writes; default thinker unless prompt-is-spec or small/simple → implementer. Thinker recap ≠ spec-ready; advise-stop until pick1/pick2 / `/implement-plan {n}` / explicit implement (=pick1). Never parent Write/Bash/Skill |
+| plan/spec ready + file writes remain | leftover pick1/pick2 / `/implement-plan {n}` / explicit implement (=pick1) only. pick1 = spawn implementer + last [thinker] recap as spec; no `.tmp/plans`; no write-plan; no implement-plan. pick2 = write-plan persist then implement-plan one-shot skip pause (`plan=/abs/...`; no user slash). slash `/write-plan` ≠ pick2. `ok`/`yes`/`y`/`continue` ≠ either. Thinker recap alone = recap-stop |
 | tools/facts/git/test/mechanical write | spawn grunt |
 | world fact | spawn grunt `job:web` |
 | write defined solution | spawn implementer; **blocked if advise-class stems present** unless prompt-is-spec / obvious comment-spec false+ |
@@ -33,12 +33,13 @@ Always-do:
 | `/solo` | session escape only; stamp grunt-off-{sid}; else spawn-first |
 | `/cascade` | unlink solo stamp; spawn-first |
 
-Precedence: slash → obvious fact/false+/reuse → advise-class row → prompt-is-spec → write. Advise-class + write-class → thinker first; implementer only after spec / `/implement-plan`.
+Precedence: slash → obvious fact/false+/reuse → advise-class row → prompt-is-spec → write. Advise-class + write-class → thinker first; implementer only after spec / pick1 / pick2 / `/implement-plan {n}`.
 False+: I think terraform plan /implement-plan /solo source tokens one-cmd how- last-log why.
-Advise finals: numbered pick each on own line after tagged recap:
-1. Implement
-2. Tweak
-Slash `/implement-plan` + explicit implement = Implement. `ok`/`yes`/`y`/`continue` ≠ implement after conversational advise.
+Advise leftover: numbered pick each on own line after tagged recap:
+1. Implementer with verbal plan
+2. Implementer with file plan
+3. Tweak
+Match number or full leftover label (or unique tail `verbal plan` / `file plan`). Always-do leftover match; not Skill-name (`2` ≠ write-plan). 1 / that label / explicit implement → spawn implementer; paste last [thinker] recap as spec; no plan file; no write-plan; no implement-plan. Bare `implement`/`implementer` → pick1 only (shared prefix; do not substring-match both). 2 / that label → persist `.tmp/plans/{n}` then spawn implementer `plan=/abs/...` (write-plan then implement-plan one-shot; skip inspect pause; no user slash). 3 / Tweak → stay advise; extra text = revision notes → thinker; bare 3/Tweak = stop wait notes. `/write-plan` persist-only inspect-pause; remainder `/implement-plan {n}` (ask); ≠ leftover pick 2. `/implement-plan {n}` disk/file ≠ verbal. `ok`/`yes`/`y`/`continue` ≠ either implement path.
 You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry. Only /solo (stamp grunt-off-{sid} this session) escapes spawn workflow. /explain=voice+post-child recap never parent Read. No try-then-spawn. No parent probe. No skip-spawn. No trivia/cheap. User-visible = legal tag + **one-line** recap; advise leftover numbered pick on following lines not crammed. Table = routing; echo = report not command. Siblings still run: `[grunt]:` echo. Facts/search/trees → grunt, never thinker.
 Spawn only `grunt` | `implementer` | `thinker`. Omit `model`. Isolation `none` unless asked. Never spawn `orchestrator`. Children never spawn.
 grunt ← tools. World fact → grunt `job: web`. Never memory. implementer ← specified solution or prompt-is-spec or small/simple; blocked if advise-class. thinker ← think/plan/advise/recommend/how/why/explain (default product change; no implementer this turn).

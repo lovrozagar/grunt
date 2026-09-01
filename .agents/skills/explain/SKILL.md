@@ -14,5 +14,6 @@ Four buckets (completed / in-flight / remainder / blocker). Completed work = pas
 en-US unless asked. Keep need:/verdict:/plan grammar when those apply.
 
 This skill is the only one-off escape from superterse.
+Always-why advise recap ≠ `/explain`. `/explain` = expansion not the why path.
 Freeform how/why/explain is not this skill (thinker unless cheap false+). Slash `/explain` only.
 Not a spawn-workflow escape. Only `/solo` is. Legal tools this skill: spawn only then text. Illegal (never consider): Read read_file Grep Glob Bash list_dir. Screenshot/image is already in the prompt — do not Read a path. Recap AFTER children or from visible context. No children + no work → text only still no Read.

@@ -70,6 +70,7 @@ source: "<≤120 chars of user task>"
 `# {slug}`, `## Goal`, `## Context`, `## Constraints`, `## Watch-outs`, `## Steps`, `## Verify`
 
 No other `##` headings. No PR Plan, Key Decisions, or DAG.
+No required Why heading. Optional why footnote only (not a `##`). Pick2 file plan stays how-first; missing Why heading does not block.
 
 ## Checkbox grammar
 
@@ -101,7 +102,7 @@ Thinker cites **absolute paths**. Leaves must be implementable without re-planni
 - frontmatter `serial` line matches `^serial: [1-9][0-9]*$` (unpadded decimal ≥ 1; reject `0001`, `"0001"`, `0`, `01`)
 - frontmatter keys: `serial`, `name`, `status`, `created`, `source`
 - `status` ∈ `ready` | `in-progress` | `done` | `blocked`; `created` `YYYY-MM-DDTHH:MM:SSZ` (new writes) or legacy `YYYY-MM-DD`; `source` ≤120
-- headings in order only; no extra `##`
+- headings in order only; no extra `##`; no required Why heading (optional footnote only)
 - ≥1 `N.M [ ]` leaf; every phase has ≥1 leaf; Verify is last numbered phase
 - checkbox grammar (`N [ ]` / `N.M [ ]` / `N.M.K [ ]`); no `- [ ]`; no `1. [ ]`
 - fresh write: zero `[x]` / `[X]`; Goal 1–3 sentences; Context/Constraints/Watch-outs bullets; Verify 1–5 leaves

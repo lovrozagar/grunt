@@ -412,7 +412,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: advise stop\n1. Implement\n2. Tweak",
+          "[orchestrator]: advise stop\n1. Implementer with verbal plan\n2. Implementer with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-advise-leftover",
       },
@@ -433,7 +433,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: wait grunt\n1. Implement\n2. Tweak",
+          "[orchestrator]: wait grunt\n1. Implementer with verbal plan\n2. Implementer with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-wait-leftover",
       },
@@ -447,21 +447,24 @@ describe("orchestrate-parent Stop", () => {
     expect(JSON.parse(result.stdout).decision).toBe("block");
   });
 
-  it("parent SSOT un-cramps advise 1./2. onto own lines", () => {
+  it("parent SSOT un-cramps advise 1./2./3. onto own lines", () => {
+    const leftover =
+      /1\. Implementer with verbal plan\n2\. Implementer with file plan\n3\. Tweak/;
     const files = [
       ".rulesync/reference/output.md",
       ".rulesync/reference/cascade.md",
       ".rulesync/subagents/orchestrator.md",
+      ".rulesync/subagents/thinker.md",
       ".rulesync/rules/overview.md",
       ".rulesync/rules/CLAUDE.md",
     ];
     for (const rel of files) {
       const text = fs.readFileSync(path.join(root, rel), "utf8");
-      expect(text).not.toMatch(/Advise finals: 1\. Implement 2\. Tweak/);
+      expect(text).not.toMatch(/1\. Implement\n2\. Tweak/);
       expect(text).not.toMatch(
-        /Advise finals end with numbered pick: 1\. Implement 2\. Tweak/,
+        /Advise finals: 1\. Implementer with verbal plan 2\. Implementer with file plan 3\. Tweak/,
       );
-      expect(text).toMatch(/1\. Implement\n2\. Tweak/);
+      expect(text).toMatch(leftover);
     }
   });
 
@@ -758,6 +761,40 @@ describe("orchestrate-parent Stop", () => {
       ".agents/skills/pickup/SKILL.md",
     ]) {
       expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
+  });
+
+  it("implement-plan empty-arg unique resume; not run-plan; pickup stays handoffs", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/implement-plan/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/^name: implement-plan$/m);
+    expect(ssot).toMatch(/\.rulesync\/reference\/plan-format\.md/);
+    expect(ssot).toMatch(/exactly 1 in-progress/i);
+    expect(ssot).toMatch(/need serial/);
+    expect(ssot).not.toMatch(
+      /empty \| grunt lists `\.tmp\/plans\/\*\.md` as `serial slug status`\. Stop: `need serial\. have:/,
+    );
+    expect(ssot).toMatch(/Not `\/run-plan`/);
+    expect(ssot).not.toMatch(/^name: run-plan$/m);
+    expect(ssot).toMatch(/not \/execute-plan/i);
+    expect(ssot).toMatch(/Not `\/pickup`/);
+    const pickup = fs.readFileSync(
+      path.join(root, ".rulesync/skills/pickup/SKILL.md"),
+      "utf8",
+    );
+    expect(pickup).toMatch(/\.tmp\/grunt\/handoffs\//);
+    expect(pickup).not.toMatch(/\.tmp\/plans\//);
+    for (const rel of [
+      ".grok/skills/implement-plan/SKILL.md",
+      ".claude/skills/implement-plan/SKILL.md",
+      ".agents/skills/implement-plan/SKILL.md",
+    ]) {
+      const copy = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(copy).toMatch(/exactly 1 in-progress/i);
+      expect(copy).toMatch(/Not `\/run-plan`/);
+      expect(copy).not.toMatch(/^name: run-plan$/m);
     }
   });
 

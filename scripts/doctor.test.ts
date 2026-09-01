@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CHROMIUM_BINS,
   installHints,
+  mapsRequired,
   nodeMajor,
   runDoctor,
   whichBin,
@@ -53,6 +54,16 @@ function writeRequired(dir: string, extra: Record<string, string> = {}) {
   writeBin(dir, "rulesync");
   writeBin(dir, extra.lightpandaName || "lightpanda");
   writeBin(dir, extra.chromiumName || "chromium");
+}
+
+const REQUIRED_MAPS = ["INDEX.md", "skills-map.md", "refs-map.md", "law.md"];
+
+function writeRequiredMaps(cwd: string) {
+  const dir = path.join(cwd, ".rulesync", "reference");
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of REQUIRED_MAPS) {
+    fs.writeFileSync(path.join(dir, name), `# ${name}\n`);
+  }
 }
 
 describe("nodeMajor", () => {
@@ -157,11 +168,14 @@ describe("runDoctor", () => {
       execPath: "",
     });
     expect(r.code).toBe(0);
+    expect(mapsRequired(cwd)).toBe(false);
     expect(r.stdout).toMatch(/node\s+ok/);
     expect(r.stdout).toMatch(/v22\.11\.0/);
     expect(r.stdout).toContain(path.join(bin, "git"));
     expect(r.stdout).toMatch(/gh\s+missing \(optional\)/);
     expect(r.stdout).not.toMatch(/node\s+missing/);
+    expect(r.stdout).not.toMatch(/INDEX\.md/);
+    expect(r.stdout).not.toMatch(/maps missing/);
     expect(r.stdout).not.toMatch(/install \(print-only; not run\)/);
     expect(r.stdout).toMatch(/rulesync schema doctor: npm run rulesync:doctor/);
   });
@@ -214,11 +228,132 @@ describe("runDoctor", () => {
     expect(r.stdout).not.toMatch(/chromium\s+missing/);
   });
 
+  it("tools ok, no .rulesync → skip maps; exit 0; no INDEX missing", () => {
+    const cwd = tmp("doc-nomaps-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(0);
+    expect(mapsRequired(cwd)).toBe(false);
+    expect(r.stdout).not.toMatch(/INDEX\.md/);
+    expect(r.stdout).not.toMatch(/maps missing/);
+  });
+
+  it("empty .rulesync without reference/skills → skip maps", () => {
+    const cwd = tmp("doc-empty-rs-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    fs.mkdirSync(path.join(cwd, ".rulesync"));
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(0);
+    expect(mapsRequired(cwd)).toBe(false);
+    expect(r.stdout).not.toMatch(/maps missing/);
+  });
+
+  it("tools ok but .rulesync/reference/ without INDEX/skills-map/refs-map/law → exit 1", () => {
+    const cwd = tmp("doc-maps-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    fs.mkdirSync(path.join(cwd, ".rulesync", "reference"), { recursive: true });
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(1);
+    expect(mapsRequired(cwd)).toBe(true);
+    for (const name of REQUIRED_MAPS) {
+      expect(r.stdout).toMatch(new RegExp(`${name.replace(".", "\\.")}\\s+missing`));
+    }
+    expect(r.stdout).toMatch(/maps missing: INDEX\.md, skills-map\.md, refs-map\.md, law\.md/);
+  });
+
+  it("tools ok but .rulesync/skills/ without maps → exit 1", () => {
+    const cwd = tmp("doc-skills-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    fs.mkdirSync(path.join(cwd, ".rulesync", "skills"), { recursive: true });
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(1);
+    expect(mapsRequired(cwd)).toBe(true);
+    expect(r.stdout).toMatch(/maps missing: INDEX\.md, skills-map\.md, refs-map\.md, law\.md/);
+  });
+
+  it("product SoT with all four maps present → exit 0", () => {
+    const cwd = tmp("doc-maps-ok-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    writeRequiredMaps(cwd);
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/INDEX\.md\s+ok/);
+    expect(r.stdout).toMatch(/law\.md\s+ok/);
+    expect(r.stdout).not.toMatch(/maps missing/);
+  });
+
+  it("each required map file missing is a fail even if the others exist", () => {
+    const cwd = tmp("doc-map-one-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    writeRequiredMaps(cwd);
+    fs.rmSync(path.join(cwd, ".rulesync/reference/law.md"));
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(1);
+    expect(r.stdout).toMatch(/law\.md\s+missing/);
+    expect(r.stdout).toMatch(/maps missing: law\.md/);
+    expect(r.stdout).not.toMatch(/INDEX\.md\s+missing/);
+  });
+
   it("whichBin finds chrome.exe on win32 PATH dir", () => {
     const dir = tmp("which-win-");
     const exe = path.join(dir, "chrome.exe");
     fs.writeFileSync(exe, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     expect(whichBin("chrome", dir, "win32")).toBe(exe);
+  });
+
+  it("skill content conflict vs packaged warns; exit still 0 when tools+maps ok", () => {
+    const cwd = tmp("doc-sk-conflict-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    writeRequiredMaps(cwd);
+    const wsSkill = path.join(cwd, ".rulesync", "skills", "parent");
+    const pkgSkill = path.join(
+      cwd,
+      "node_modules",
+      "@lovrozagar",
+      "grunt",
+      ".rulesync",
+      "skills",
+      "parent",
+    );
+    fs.mkdirSync(wsSkill, { recursive: true });
+    fs.mkdirSync(pkgSkill, { recursive: true });
+    fs.writeFileSync(path.join(wsSkill, "SKILL.md"), "custom\n");
+    fs.writeFileSync(path.join(pkgSkill, "SKILL.md"), "packaged\n");
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/skill conflicts \(warn/);
+    expect(r.stdout).toMatch(/skill `parent` differs from packaged grunt; re-init overwrites/);
+  });
+
+  it("identical packaged skill → no conflict lines", () => {
+    const cwd = tmp("doc-sk-same-");
+    const bin = path.join(cwd, "bin");
+    writeRequired(bin);
+    writeRequiredMaps(cwd);
+    const wsSkill = path.join(cwd, ".rulesync", "skills", "parent");
+    const pkgSkill = path.join(
+      cwd,
+      "node_modules",
+      "@lovrozagar",
+      "grunt",
+      ".rulesync",
+      "skills",
+      "parent",
+    );
+    fs.mkdirSync(wsSkill, { recursive: true });
+    fs.mkdirSync(pkgSkill, { recursive: true });
+    fs.writeFileSync(path.join(wsSkill, "SKILL.md"), "same\n");
+    fs.writeFileSync(path.join(pkgSkill, "SKILL.md"), "same\n");
+    const r = runDoctor({ cwd, pathEnv: bin, platform: "linux", execPath: "" });
+    expect(r.code).toBe(0);
+    expect(r.stdout).not.toMatch(/skill conflicts/);
   });
 });
 

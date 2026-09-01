@@ -13,8 +13,11 @@ Cheap outline. Not a file dump.
 - `.rulesync/reference/hooks.md` — hook policy
 - `.rulesync/reference/map.md` — this file
 - `.rulesync/reference/output.md` — default voice
+- `.rulesync/reference/law.md` — domain law (stub; protocol stays cascade/overview)
+- Generated catalogs: `.rulesync/reference/INDEX.md` — aggregate catalog composed from slices (law.md, skills-map.md, refs-map.md). Maps/law = slices for deep dive. INDEX always. Not if-maps-else.
 
 ## Agent SSOT
+- Docs SoT: `.rulesync/skills` + `.rulesync/reference`. Generate maps anything placed there. `.agents` / `.claude` (and other host trees) are mirrors, not SoT; no mirror scan
 - `.rulesync/subagents/{orchestrator,implementer,thinker,grunt}.md`
 - `.rulesync/rules/overview.md` → `AGENTS.md`
 - `.rulesync/rules/CLAUDE.md` → `CLAUDE.md`
@@ -23,16 +26,17 @@ Cheap outline. Not a file dump.
 ## Grok hand files
 - `.grok/hooks/orchestrate-parent.js` + `.grok/hooks/orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
 - `.grok/hooks/rtk.json` — RTK
-- `.grok/skills/{write-plan,implement-plan,shared}/` — hand-only (no rulesync SSOT); point to cascade, do not paste
-- `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` — generated from `.rulesync/skills/`; do not hand-edit
+- `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` — generated from `.rulesync/skills/`; do not hand-edit
 - `.grok/parent.md` — 1-line pointer to orchestrator agent; not SessionStart
 - `.grok/roles/*.toml`
 - `.grok/global-settings.toml` — merged into `~/.grok/config.toml` by `scripts/sync-global-settings.mjs` (not auto-loaded; project config cannot set `[features]`)
 - `.rulesync/global-settings/` — host manifest and reserved noop payloads
 - `.rulesync/mcp-policy.jsonc` — MCP deny-default SSOT (`default: deny`, `allow: []`)
-- `.rulesync/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,browser}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode)
+- `.rulesync/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,browser,write-plan,implement-plan}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode)
 
 ## Scripts
+- `scripts/pipeline.mjs` — inner generate/check/watch chain (rulesync + emit-* + hooks-union / check-globals). Called by `guarded-roots`; not a public npm script (`rulesync:generate` `rulesync:check` `rulesync:watch` only)
+- `scripts/guarded-roots.mjs` — snapshot/remerge `AGENTS.md` `CLAUDE.md` `GEMINI.md` around pipeline; check interiors wrapper
 - `scripts/check-globals.mjs` — `$HOME/.grok/config.toml` `[agent].name==orchestrator` + `[features].two_pass_compaction==true`; project `.grok/config.toml` must not have `[features]`/`[agent]`; wired as `sync:globals:check` (also after emit-mcp in `rulesync:check`)
 - `scripts/gate-fat-tools.mjs`
 - `scripts/scrub-spawn-prompt.mjs`
@@ -48,7 +52,7 @@ Cheap outline. Not a file dump.
 - `scripts/browser.mjs` — session browser rail `nav|snap|click|fill|shot|pdf|stop`; Lightpanda default; Chromium on verb/OS/probe/paint-host/one-escalate; `.tmp/grunt/browser/`
 
 ## Tmp
-- `.tmp/plans/` — persist-plan / parent / implementer
+- `.tmp/plans/` — persist-plan / parent / implementer; format SSOT = `.rulesync/reference/plan-format.md`
 - `.tmp/orchestrator-logs/` — parent stamps (shared; not grunt scratch)
 - `.tmp/grunt/` — grunt scratch/tmp only
 - `.tmp/grunt/browser/` — browser session/profile/shot/pdf (not MCP)
@@ -60,7 +64,8 @@ Cheap outline. Not a file dump.
 
 ## Generated (do not hand-edit; committed, not gitignored)
 - `AGENTS.md`, `CLAUDE.md`
-- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release}/` (from `.rulesync/skills/`)
+- `.rulesync/reference/INDEX.md`, `skills-map.md`, `refs-map.md` (`emit-maps.mjs`)
+- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` (from `.rulesync/skills/`)
 - `.grok/agents/*`
 - `.claude/agents/*`
 - `.codex/agents/*`

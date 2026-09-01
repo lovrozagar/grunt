@@ -2,6 +2,11 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import {
+  WORKSPACE_SKILLS_REL,
+  findSkillContentConflicts,
+  formatSkillConflictWarn,
+} from "../scripts/skill-conflicts.mjs"
 
 const PKG_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -9,10 +14,12 @@ const PRODUCT_SCRIPTS = [
   "check-globals.mjs",
   "emit-agent-shell-tools.mjs",
   "emit-gemini.mjs",
+  "emit-maps.mjs",
   "guarded-roots.mjs",
   "emit-mcp-policy.mjs",
   "gate-fat-tools.mjs",
   "hooks-union.mjs",
+  "pipeline.mjs",
   "grunt-job.mjs",
   "parse-need.mjs",
   "persist-handoff.mjs",
@@ -23,6 +30,7 @@ const PRODUCT_SCRIPTS = [
   "sync-global-settings.mjs",
   "browser.mjs",
   "doctor.mjs",
+  "skill-conflicts.mjs",
   "scrub-text",
 ]
 
@@ -377,7 +385,7 @@ export function mergePackageJson(dest, pkgRoot) {
   const srcPkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, "package.json"), "utf8"))
   destPkg.scripts = { ...(destPkg.scripts || {}) }
   for (const [k, v] of Object.entries(srcPkg.scripts || {})) {
-    if (k === "test") continue
+    if (k === "test" || k.endsWith(":raw")) continue
     destPkg.scripts[k] = mergeScriptValue(k, v, destPkg.scripts[k])
   }
   destPkg.devDependencies = { ...(destPkg.devDependencies || {}) }
@@ -406,6 +414,17 @@ export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileS
   const self = samePath(dest, pkgRoot)
 
   phase("merge", () => {
+    const wsSkills = path.join(dest, WORKSPACE_SKILLS_REL)
+    const pkgSkills = path.join(pkgRoot, WORKSPACE_SKILLS_REL)
+    if (!samePath(wsSkills, pkgSkills)) {
+      for (const c of findSkillContentConflicts({
+        workspaceSkillsDir: wsSkills,
+        packagedSkillsDir: pkgSkills,
+      })) {
+        console.warn(formatSkillConflictWarn(c.name))
+      }
+    }
+
     for (const dir of COPY_DIRS) {
       const src = path.join(pkgRoot, dir)
       const d = path.join(dest, dir)

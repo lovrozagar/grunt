@@ -4,6 +4,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  PACKAGED_SKILLS_REL,
+  WORKSPACE_SKILLS_REL,
+  findSkillContentConflicts,
+  formatSkillConflictWarn,
+} from "./skill-conflicts.mjs";
 
 export const CHROMIUM_BINS = [
   "chromium",
@@ -23,6 +29,12 @@ const RTK_DOCS = "https://www.rtk-ai.app/docs/getting-started/installation/";
 const LP_INSTALL_SH = "curl -fsSL https://pkg.lightpanda.io/install.sh | bash";
 const RULESYNC_SCHEMA = "rulesync schema doctor: npm run rulesync:doctor";
 const REQUIRED = ["node", "npm", "git", "rtk", "rulesync", "lightpanda", "chromium"];
+export const REQUIRED_MAP_FILES = [
+  { name: "INDEX.md", rel: ".rulesync/reference/INDEX.md" },
+  { name: "skills-map.md", rel: ".rulesync/reference/skills-map.md" },
+  { name: "refs-map.md", rel: ".rulesync/reference/refs-map.md" },
+  { name: "law.md", rel: ".rulesync/reference/law.md" },
+];
 
 export function nodeMajor(version) {
   const m = String(version || "").match(/(\d+)/);
@@ -158,10 +170,33 @@ export function installHints(id, platform = process.platform) {
 }
 
 function row(name, status, extra = "") {
-  const a = String(name).padEnd(10);
+  const a = String(name).padEnd(14);
   const b = String(status).padEnd(18);
   const c = extra ? String(extra).trim() : "";
   return c ? `${a} ${b} ${c}` : `${a} ${b}`;
+}
+
+function mapFilePresent(cwd, rel) {
+  try {
+    return fs.statSync(path.join(cwd, rel)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isDir(abs) {
+  try {
+    return fs.statSync(abs).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Product SoT: reference tree or skills (emit-maps in play). No .rulesync / no those trees → bins-only. */
+export function mapsRequired(cwd) {
+  const rs = path.join(cwd || "", ".rulesync");
+  if (!isDir(rs)) return false;
+  return isDir(path.join(rs, "reference")) || isDir(path.join(rs, "skills"));
 }
 
 export function runDoctor({
@@ -232,10 +267,37 @@ export function runDoctor({
     }
   }
 
+  const missingMaps = [];
+  if (mapsRequired(cwd)) {
+    for (const f of REQUIRED_MAP_FILES) {
+      if (mapFilePresent(cwd, f.rel)) {
+        lines.push(row(f.name, "ok", f.rel));
+      } else {
+        missingMaps.push(f);
+        lines.push(row(f.name, "missing", f.rel));
+      }
+    }
+    if (missingMaps.length) {
+      lines.push(`maps missing: ${missingMaps.map((f) => f.name).join(", ")}`);
+    }
+  }
+
+  const skillConflicts = findSkillContentConflicts({
+    workspaceSkillsDir: path.join(cwd || "", WORKSPACE_SKILLS_REL),
+    packagedSkillsDir: path.join(cwd || "", PACKAGED_SKILLS_REL),
+  });
+  if (skillConflicts.length) {
+    lines.push("");
+    lines.push("skill conflicts (warn; re-init overwrites grunt-owned names):");
+    for (const c of skillConflicts) {
+      lines.push(formatSkillConflictWarn(c.name));
+    }
+  }
+
   lines.push("");
   lines.push(RULESYNC_SCHEMA);
   const stdout = `${lines.join("\n")}\n`;
-  return { code: missingRequired.length ? 1 : 0, stdout, stderr: "" };
+  return { code: missingRequired.length || missingMaps.length ? 1 : 0, stdout, stderr: "" };
 }
 
 function main() {

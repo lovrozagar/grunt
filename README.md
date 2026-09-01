@@ -105,7 +105,7 @@ SoT: `.rulesync/subagents/{orchestrator grunt implementer thinker}.md`
 
 Emit: `.claude/` `.grok/` `.agents/` `.gemini/`
 
-- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap (do not cram `1. Implement 2. Tweak` onto the recap line). `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
+- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap (do not cram `1. Implementer with verbal plan 2. Implementer with file plan 3. Tweak` onto the recap line). `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
 - **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation `verdict:`. Never feature solution. Never spawn. World fact: `job: web`
 - **implementer** — write already-defined solution on allowlisted paths. TDD when spec/plan says tests. Validate + sim after write. Fat dumps via `need:`. Never spawn. Never plan. Id is **implementer** (not Implementor)
 - **thinker** — think/plan/advise/recommend/how/why/explain; unsure→thinker; cheap false+; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
@@ -120,15 +120,17 @@ Lightpanda-first session CLI: `node scripts/browser.mjs nav|snap|click|fill|shot
 
 ## Skills
 
-Present under `.claude` / `.rulesync` / `.agents` (`rulesync -f skills` mirrors SSOT):
+Present under `.claude` / `.rulesync` / `.agents` / `.grok` (`rulesync -f skills` mirrors SSOT):
 
-- `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo`
+- `browser` `cascade` `commit` `commit-and-push` (1-release alias → `commit-push`) `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo` `write-plan` `implement-plan`
 
-Grok-only (hand files under `.grok/skills/`; no `.rulesync/skills` SSOT; not mirrored):
+Reserved names: do not reuse those stems for consumer custom skills. Same name → one SSOT under `.rulesync/skills/<name>/`; re-init force-refresh overwrites grunt-owned names; extras kept; maps `origin` badge ≠ content picker. See `.rulesync/reference/law.md` (flows into INDEX).
 
-- `write-plan` `implement-plan` `shared` (`/write-plan` plan-only → `next: /implement-plan`; advise unlock = pick **1. Implement**, not `ok`/`yes`/`go`; slash `/implement-plan` still valid alias)
+`/write-plan` and `/implement-plan` SSOT: `.rulesync/skills/{write-plan,implement-plan}/`; format SSOT `.rulesync/reference/plan-format.md`. `/write-plan` plan-only inspect-pause → `next: /implement-plan {n}`; empty `/implement-plan` resumes unique in-progress or starts unique ready, else lists (need serial); leftover pick **2. Implementer with file plan** = persist then implement one-shot skip pause; leftover pick **1. Implementer with verbal plan** / explicit implement = verbal spec no plan file; slash `/implement-plan {n}` disk/file ≠ verbal; not `ok`/`yes`/`go`
 
 ## Generate
+
+SoT: `.rulesync/skills` + `.rulesync/reference`. Generate maps anything placed there. `.agents` / `.claude` (and other host trees) are mirrors, not SoT; no mirror scan.
 
 Pipeline (no `-t geminicli`):
 
@@ -177,7 +179,7 @@ Same topology as the session recap; every legal edge labeled.
 ```
  USER
   │
-  │  session in/out  (parent only; tagged one-line recap; advise leftover 1./2. own lines)
+  │  session in/out  (parent only; tagged one-line recap; advise leftover 1./2./3. own lines)
   │  TUI local; completion tokens from Model API (mixed)
   ▼
 ┌──────────────────────── CLI HOST (this process) ────────────────────────┐
@@ -323,6 +325,8 @@ Use these labels. Do not revive “prompt input” or “agent to use”.
 
 Repo-relative (repository root):
 
+- `.rulesync/reference/INDEX.md` — aggregate catalog composed from slices (law.md, skills-map.md, refs-map.md). Maps/law = slices for deep dive. Always. Not if-maps-else
+- `.rulesync/reference/law.md` — domain law stub (protocol stays cascade/overview)
 - `.rulesync/reference/cascade.md` — parent-only spawn, peek/kill table, `need:` / `resume_from`, isolation `verdict:`
 - `.rulesync/reference/rtk.md` — Bash/shell stdout compression
 - `.rulesync/reference/map.md` — cheap outline of protocol, scripts, generated trees
@@ -333,7 +337,7 @@ Repo-relative (repository root):
 
 ## Layout
 
-Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/guarded-roots.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE` `CHANGELOG.md`
+Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/guarded-roots.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/pipeline.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE` `CHANGELOG.md`
 
 No `scripts/*.test.ts` `scripts/fixtures/` `docs/` `coverage/` `vitest.config.ts` in `files`. `cli` dir ships whole (includes `cli/*.test.ts`).
 
@@ -344,8 +348,8 @@ Repo root (also): `coverage/` `.gemini/` `GEMINI.md` — no `src/` no `CONTRIBUT
 - `bin/grunt.js` — CLI bin
 - `cli/grunt.mjs` — commands
 - `scripts/` — init copies product scripts (`grunt-job.mjs` `scrub-text` …). Re-init sentinels: `.grok/hooks/orchestrate-parent.js` `.rulesync` `<!-- grunt:begin -->`
-- `.rulesync/` — SoT (subagents skills reference)
-- `.claude/` `.grok/` `.codex/` `.agents/` `.gemini/` — host emit
+- `.rulesync/` — SoT (subagents skills reference). Skills + reference maps on generate; host trees are mirrors
+- `.claude/` `.grok/` `.codex/` `.agents/` `.gemini/` — host emit; not SoT; no mirror scan
 - `coverage/` — vitest local not published
 
 ## Develop
@@ -366,7 +370,7 @@ npm i && npm test
 
 Keep these four flows only:
 
-1. “Create me a react weather app” → thinker plan/recap-stop + pick 1.Implement 2.Tweak → user picks 1 or `/implement-plan` → implementer write → recap
+1. “Create me a react weather app” → thinker plan/recap-stop + pick 1.Implementer with verbal plan 2.Implementer with file plan 3.Tweak → user picks 1 (verbal spec) or 2 (file plan one-shot) or `/implement-plan {n}` → implementer write → recap
 2. “What is 2+2” → grunt → `[grunt]:` echo
 3. Marvel theatrical next → grunt `job:web` → recap
 4. `.logs` 3/6/2021 tag `framework bug` → grunt local search → recap

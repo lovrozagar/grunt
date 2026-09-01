@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-01
+
+### Added
+
+- Advise leftover picks after thinker recap: (1) Implementer with verbal plan (2) Implementer with file plan (3) Tweak — pick1 = implementer + last thinker recap as spec; pick2 = write-plan persist then implement-plan one-shot (`plan=/abs/...`); `/write-plan` ≠ pick2; `/implement-plan {n}` disk/file ≠ verbal
+- Thinker recap shape `{decided}. {how-capsule}. {why-clause}`
+- rulesync SSOT skills `write-plan` + `implement-plan` (host mirrors under `.agents` / `.claude` / `.grok` as applicable)
+- `.rulesync/reference/` maps/index: `INDEX.md` `law.md` `plan-format.md` `refs-map.md` `skills-map.md`
+- `scripts/pipeline.mjs` `emit-maps.mjs` `skill-conflicts.mjs` (+ tests/fixtures); doctor `REQUIRED_MAP_FILES` + skill-conflicts warn; `cli/init.mjs` `PRODUCT_SCRIPTS` for those scripts + skill conflict warn
+
+### Changed
+
+- Public `rulesync:generate|check|watch` via guarded-roots → pipeline (drop consumer-facing `:raw` scripts)
+- `package.json` `files` publishes `emit-maps` `pipeline` `skill-conflicts`
+- README: advise picks; `.rulesync` SoT / host mirrors; maps on generate
+- `plan-format` moved to `.rulesync/reference/plan-format.md` (was `.grok/skills/shared/plan-format.md`)
+- `commit-and-push` thin alias; explain skill updates as in tree
+
+### Removed
+
+- Tracked `.grok/skills/shared/plan-format.md`
+- npm scripts `rulesync:generate:raw` / `rulesync:watch:raw` / `rulesync:check:raw`
+
 ## [0.4.2] - 2026-08-31
 
 ### Added

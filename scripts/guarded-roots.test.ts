@@ -8,6 +8,7 @@ import {
   attachGuardedRootWatchers,
   runGuardedRoots,
 } from "./guarded-roots.mjs";
+import { COMMANDS } from "./pipeline.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, "guarded-roots.mjs");
@@ -74,7 +75,7 @@ describe("runGuardedRoots", () => {
     expect(() => runGuardedRoots("generate", { cwd: dest, exec })).toThrow(
       /raw failed/,
     );
-    expect(String(exec.mock.calls[0][0])).toContain("rulesync:generate:raw");
+    expect(exec.mock.calls.map((c) => c[0])).toEqual([COMMANDS.generate[0]]);
     expect(exec.mock.calls[0][1]).toMatchObject({
       cwd: dest,
       stdio: "inherit",
@@ -85,7 +86,7 @@ describe("runGuardedRoots", () => {
     );
   });
 
-  it("check runs check:raw inside interiors wrapper", () => {
+  it("check runs pipeline inside interiors wrapper", () => {
     const dest = tmp("guarded-check-");
     writeGuarded(dest, "AGENTS.md", "ssot", "user bottom");
     const exec = vi.fn(() => {
@@ -94,7 +95,7 @@ describe("runGuardedRoots", () => {
       expect(live).not.toContain("user bottom");
     });
     runGuardedRoots("check", { cwd: dest, exec });
-    expect(String(exec.mock.calls[0][0])).toContain("rulesync:check:raw");
+    expect(exec.mock.calls.map((c) => c[0])).toEqual(COMMANDS.check);
     expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toContain(
       "user bottom",
     );
@@ -116,7 +117,7 @@ describe("runGuardedRoots", () => {
         attachWatchers: () => stop,
       }),
     ).not.toThrow();
-    expect(String(exec.mock.calls[0][0])).toContain("rulesync:watch:raw");
+    expect(exec.mock.calls.map((c) => c[0])).toEqual(COMMANDS.watch);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync(path.join(dest, "AGENTS.md"), "utf8")).toBe(
       "<!-- grunt:begin -->\nfrom-watch\n<!-- grunt:end -->\nkeep me\n",

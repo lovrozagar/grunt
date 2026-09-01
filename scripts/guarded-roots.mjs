@@ -11,10 +11,7 @@ import {
   snapshotGuardedRoots,
   withGuardedCheckInteriors,
 } from "../cli/init.mjs";
-
-const GENERATE_RAW = "rulesync:generate:raw";
-const CHECK_RAW = "rulesync:check:raw";
-const WATCH_RAW = "rulesync:watch:raw";
+import { runPipeline } from "./pipeline.mjs";
 
 export function attachGuardedRootWatchers(cwd, heal) {
   const w = fs.watch(cwd, (_event, filename) => {
@@ -36,7 +33,7 @@ export function runGuardedRoots(mode, { cwd = process.cwd(), exec = execSync, at
   if (mode === "generate") {
     const snap = snapshotGuardedRoots(cwd);
     try {
-      exec(`npm run ${GENERATE_RAW}`, { cwd, stdio: "inherit", shell: true });
+      runPipeline("generate", { cwd, exec });
     } finally {
       remergeGuardedRoots(cwd, snap);
     }
@@ -44,7 +41,7 @@ export function runGuardedRoots(mode, { cwd = process.cwd(), exec = execSync, at
   }
   if (mode === "check") {
     withGuardedCheckInteriors(cwd, () => {
-      exec(`npm run ${CHECK_RAW}`, { cwd, stdio: "inherit", shell: true });
+      runPipeline("check", { cwd, exec });
     });
     return;
   }
@@ -54,7 +51,7 @@ export function runGuardedRoots(mode, { cwd = process.cwd(), exec = execSync, at
     const attach = attachWatchers || ((opts) => attachGuardedRootWatchers(opts.cwd, opts.heal));
     const stop = attach({ cwd, snap, heal });
     try {
-      exec(`npm run ${WATCH_RAW}`, { cwd, stdio: "inherit", shell: true });
+      runPipeline("watch", { cwd, exec });
     } finally {
       try {
         stop?.();
