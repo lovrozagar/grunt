@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { destAlreadyInited, init, shouldAutoSkipGlobals } from "./init.mjs"
+import { destAlreadyInited, init, shouldAutoSkipGlobals, toGruntScriptName } from "./init.mjs"
 import { confirm, isInteractive, select, spinner } from "./prompt.mjs"
 
 const PKG_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -12,12 +12,12 @@ const USAGE = `Usage: grunt [command]
 Default (no command): TTY menu; else init — full setup
 
 Commands:
-  init          Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
-  generate      npm run rulesync:generate
-  check         npm run rulesync:check
-  sync-globals  npm run sync:globals (dry-run; --apply to write)
-  purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
-  doctor        npm run doctor
+  init          Full setup: merge SoT, npm install, grunt:rulesync:generate, grunt:sync:globals:apply, grunt:rulesync:check
+  generate      npm run grunt:rulesync:generate
+  check         npm run grunt:rulesync:check
+  sync-globals  npm run grunt:sync:globals (dry-run; --apply to write)
+  purge-mcps    npm run grunt:purge:global-mcps (dry-run; --apply to write)
+  doctor        npm run grunt:doctor
   help          Show this help
   version       Print package version
 
@@ -146,24 +146,24 @@ async function dispatch(cmd, flags, interactive) {
     return
   }
   if (cmd === "generate") {
-    npmRun("rulesync:generate")
+    npmRun(toGruntScriptName("rulesync:generate"))
     return
   }
   if (cmd === "check") {
-    npmRun("rulesync:check")
+    npmRun(toGruntScriptName("rulesync:check"))
     return
   }
   if (cmd === "sync-globals") {
-    const script = flags.apply ? "sync:globals:apply" : "sync:globals"
+    const script = flags.apply ? toGruntScriptName("sync:globals:apply") : toGruntScriptName("sync:globals")
     npmRun(script, hostExtra(flags.host))
     return
   }
   if (cmd === "purge-mcps") {
-    npmRun(flags.apply ? "purge:global-mcps:apply" : "purge:global-mcps")
+    npmRun(flags.apply ? toGruntScriptName("purge:global-mcps:apply") : toGruntScriptName("purge:global-mcps"))
     return
   }
   if (cmd === "doctor") {
-    npmRun("doctor")
+    npmRun(toGruntScriptName("doctor"))
     return
   }
   process.stdout.write(USAGE)

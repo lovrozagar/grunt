@@ -1,6 +1,6 @@
 {
   "name": "@lovrozagar/grunt",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Multi-agent orchestrator SoT — deep-merge rulesync trees, product scripts, and generate pipeline into a consumer repo",
   "keywords": [
     "agents",
@@ -36,6 +36,7 @@
     "scripts/grunt-job.mjs",
     "scripts/parse-need.mjs",
     "scripts/persist-handoff.mjs",
+    "scripts/persist-tmp.mjs",
     "scripts/persist-plan.mjs",
     "scripts/purge-global-mcps.mjs",
     "scripts/scrub-spawn-prompt.mjs",

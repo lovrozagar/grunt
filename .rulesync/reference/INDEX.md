@@ -6,7 +6,7 @@ Protocol stays cascade/overview; domain fills this.
 
 ## Skills naming
 
-Reserved (do not reuse in consumer custom skills): `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `implement-plan` `parent` `pickup` `solo` `write-plan`.
+Reserved (do not reuse in consumer custom skills): `browser` `cascade` `commit` `commit-and-push` `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `implement-plan` `parent` `pickup` `solo` `tmp` `write-plan`.
 
 Override: same name → one SSOT path (`.rulesync/skills/<name>/`). Re-init force-refresh overwrites grunt-owned names; consumer extras kept. Maps `origin` badge ≠ content picker.
 
@@ -27,6 +27,7 @@ Override: same name → one SSOT path (`.rulesync/skills/<name>/`). Re-init forc
 | parent | local | One-turn parent-orchestrator escape. Use for /parent. Not a session mode. |  |  |  |
 | pickup | local | Pick up/continue a session handoff under .tmp/grunt/handoffs/. Use for /pickup, pick up, continue handoff, serial, drag… |  |  |  |
 | solo | local | Session mode. /solo disables the grunt cascade for this session — one normal agent, no spawn, no orchestrator. /cascade… |  |  |  |
+| tmp | local | One-off convo artifact dump under .tmp/grunt/tmp/. Use for /tmp, dump a draft, save a note/email/script from this sessi… |  |  |  |
 | write-plan | local | Thinker drafts a local implementer-ready checklist plan; parent Write persists .tmp/plans/{serial}-{slug}-{YYYYMMDDTHHM… |  |  |  |
 
 # Refs

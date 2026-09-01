@@ -23,6 +23,7 @@ const PRODUCT_SCRIPTS = [
   "grunt-job.mjs",
   "parse-need.mjs",
   "persist-handoff.mjs",
+  "persist-tmp.mjs",
   "persist-plan.mjs",
   "purge-global-mcps.mjs",
   "scrub-spawn-prompt.mjs",
@@ -38,14 +39,19 @@ const COPY_DIRS = [".rulesync", ".grok", ".codex", ".claude", ".agents"]
 const GUARDED_MD_FILES = ["AGENTS.md", "CLAUDE.md"]
 export const GUARDED_ROOT_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"]
 // .mcp.json is intentionally not copied here: scripts/emit-mcp-policy.mjs
-// (run via `rulesync:generate`, see mergeClaudeSettings ordering) owns and
+// (run via consumer `grunt:rulesync:generate`, see mergeClaudeSettings ordering) owns and
 // merges it, so a plain-copy would just be clobbered/redundant.
+export const GRUNT_NPM_PREFIX = "grunt:"
+export function toGruntScriptName(k) {
+  return k.startsWith(GRUNT_NPM_PREFIX) ? k : `${GRUNT_NPM_PREFIX}${k}`
+}
 const OWNED_HOOK_FILES = ["scrub-spawn-prompt.mjs", "gate-fat-tools.mjs", "orchestrate-parent.js"]
 export const SENTINEL_BEGIN = "<!-- grunt:begin -->"
 export const SENTINEL_END = "<!-- grunt:end -->"
 export const MAX_GUARDED_MARKDOWN_BYTES = 2 * 1024 * 1024
 const GRUNT_REGION_RE = /<!-- grunt:begin -->\r?\n?[\s\S]*?<!-- grunt:end -->\r?\n?/g
 const GRUNT_INTERIOR_RE = /<!-- grunt:begin -->\r?\n?([\s\S]*?)<!-- grunt:end -->/g
+const ORPHAN_END_RE = /(?:^|\r?\n)[ \t]*<!-- grunt:end -->[ \t]*(?=\r?\n|$)|<!-- grunt:end -->/g
 
 function sortKeys(obj) {
   return Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]))
@@ -118,18 +124,25 @@ function inspectGuardedBuffer(buf) {
 }
 
 export function extractUserMarkdown(text) {
-  return String(text).replace(cloneRe(GRUNT_REGION_RE), "")
+  let user = String(text).replace(cloneRe(GRUNT_REGION_RE), "")
+  const i = user.indexOf(SENTINEL_BEGIN)
+  if (i >= 0) user = user.slice(0, i)
+  user = user.replace(cloneRe(ORPHAN_END_RE), "")
+  return userRemainderIsBlank(user) ? "" : user
 }
 
 export function extractGruntBody(text) {
   const parts = []
+  const src = String(text)
   const re = cloneRe(GRUNT_INTERIOR_RE)
   let m
-  while ((m = re.exec(String(text)))) {
+  while ((m = re.exec(src))) {
     parts.push(trimTrailingNewlines(m[1]))
   }
-  if (!parts.length) return null
-  return parts.join("\n")
+  if (parts.length) return parts.join("\n")
+  const i = src.indexOf(SENTINEL_BEGIN)
+  if (i < 0) return null
+  return trimTrailingNewlines(src.slice(i + SENTINEL_BEGIN.length).replace(/^\r?\n/, ""))
 }
 
 function userRemainderIsBlank(user) {
@@ -137,9 +150,10 @@ function userRemainderIsBlank(user) {
 }
 
 export function composeGuardedMarkdown(gruntBody, userRemainder, nl = "\n") {
-  const body = toNewline(trimTrailingNewlines(gruntBody), nl)
+  const raw = extractGruntBody(gruntBody) ?? gruntBody
+  const body = toNewline(trimTrailingNewlines(raw), nl)
   const block = `${SENTINEL_BEGIN}${nl}${body}${nl}${SENTINEL_END}${nl}`
-  const user = userRemainder == null ? "" : String(userRemainder)
+  const user = extractUserMarkdown(userRemainder == null ? "" : String(userRemainder))
   if (!user || userRemainderIsBlank(user)) return block
   return block + toNewline(user, nl)
 }
@@ -184,7 +198,7 @@ export function mergeGuardedMarkdown(dest, pkgRoot, file, { alreadyInited = fals
   const d = path.join(dest, file)
   if (samePath(src, d)) return
   const srcText = fs.readFileSync(src, "utf8")
-  return writeMergedGuardedFile(d, srcText)
+  return writeMergedGuardedFile(d, extractGruntBody(srcText) ?? srcText)
 }
 
 export function snapshotGuardedRoots(root) {
@@ -339,7 +353,13 @@ export function mergeClaudeSettings(destRoot, pkgRoot) {
 }
 
 function looksGruntOwnedPrefix(prefix) {
-  return /rulesync|sync:globals|^npm run /.test(prefix)
+  return /rulesync|sync:globals|^npm run |guarded-roots\.mjs|hooks-union\.mjs|doctor\.mjs|sync-global-settings\.mjs|check-globals\.mjs|purge-global-mcps\.mjs/.test(
+    prefix,
+  )
+}
+
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function commandCount(script) {
@@ -369,9 +389,27 @@ function mergeScriptValue(name, newSrc, cur) {
   if (cur.startsWith(newSrc)) return cur
   const suffix = extraOwnedSuffix(cur, newSrc)
   if (suffix != null) return newSrc + suffix
-  if (looksGruntOwnedPrefix(cur)) return newSrc
+  if (name.startsWith(GRUNT_NPM_PREFIX) || looksGruntOwnedPrefix(cur)) return newSrc
   console.warn(`script \`${name}\` left untouched (unrelated customization)`)
   return cur
+}
+
+function rewriteNpmRunRefs(scripts, srcKeys) {
+  const keys = srcKeys
+    .filter((k) => k !== toGruntScriptName(k))
+    .sort((a, b) => b.length - a.length)
+  if (!keys.length) return
+  for (const name of Object.keys(scripts)) {
+    let val = scripts[name]
+    if (typeof val !== "string") continue
+    for (const k of keys) {
+      val = val.replace(
+        new RegExp(`npm run ${escapeRe(k)}(?=$|\\s|;|&)`, "g"),
+        `npm run ${toGruntScriptName(k)}`,
+      )
+    }
+    scripts[name] = val
+  }
 }
 
 export function mergePackageJson(dest, pkgRoot) {
@@ -384,10 +422,32 @@ export function mergePackageJson(dest, pkgRoot) {
 
   const srcPkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, "package.json"), "utf8"))
   destPkg.scripts = { ...(destPkg.scripts || {}) }
+  const srcKeys = []
   for (const [k, v] of Object.entries(srcPkg.scripts || {})) {
     if (k === "test" || k.endsWith(":raw")) continue
-    destPkg.scripts[k] = mergeScriptValue(k, v, destPkg.scripts[k])
+    srcKeys.push(k)
+    const destKey = toGruntScriptName(k)
+    const current = destPkg.scripts[destKey]
+    const legacy = k !== destKey ? destPkg.scripts[k] : undefined
+    const ownedLegacy =
+      legacy != null &&
+      (legacy.startsWith(v) || extraOwnedSuffix(legacy, v) != null || looksGruntOwnedPrefix(legacy))
+    if (current != null) {
+      destPkg.scripts[destKey] = mergeScriptValue(destKey, v, current)
+    } else if (ownedLegacy) {
+      destPkg.scripts[destKey] = mergeScriptValue(destKey, v, legacy)
+    } else {
+      destPkg.scripts[destKey] = v
+    }
+    if (k !== destKey && ownedLegacy) {
+      delete destPkg.scripts[k]
+    } else if (k !== destKey && legacy != null) {
+      console.warn(
+        `script \`${k}\` left untouched (unrelated customization); writing \`${destKey}\``,
+      )
+    }
   }
+  rewriteNpmRunRefs(destPkg.scripts, srcKeys)
   destPkg.devDependencies = { ...(destPkg.devDependencies || {}) }
   destPkg.devDependencies["smol-toml"] = srcPkg.devDependencies["smol-toml"]
   destPkg.devDependencies["rulesync"] = srcPkg.devDependencies["rulesync"]
@@ -473,12 +533,12 @@ export function init(dest, { pkgRoot: pkgRootOpt, execFileSync: exec = execFileS
   }
   runNpm("install", ["install"])
   const guardedSnap = snapshotGuardedRoots(dest)
-  runNpm("generate", ["run", "rulesync:generate"])
+  runNpm("generate", ["run", toGruntScriptName("rulesync:generate")])
   remergeGuardedRoots(dest, guardedSnap)
   if (!skipGlobalsApply) {
-    runNpm("sync-globals", ["run", "sync:globals:apply"])
+    runNpm("sync-globals", ["run", toGruntScriptName("sync:globals:apply")])
   }
   withGuardedCheckInteriors(dest, () => {
-    runNpm("check", ["run", "rulesync:check"])
+    runNpm("check", ["run", toGruntScriptName("rulesync:check")])
   })
 }

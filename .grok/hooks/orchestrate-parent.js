@@ -2,7 +2,7 @@
 /** PreToolUse parent-deny on Claude+Grok+Antigravity; Stop = first-non-empty-line recap; stop-block survives host banners; SubagentStop is single-registration intercept.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
 SubagentStop intercepts need: search|exec with grunt-job verdicts.
-Stop: first-non-empty-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]: recap
+Stop: first-non-empty-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]:/[tmp]: recap
 | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
 Empty lastAssistantMessage → transcript_path tail-scan. Fail-open: parse/crash → empty stdout, exit 0.
 */
@@ -25,6 +25,7 @@ import {
 } from "../../scripts/gate-fat-tools.mjs";
 import { persistPlan } from "../../scripts/persist-plan.mjs";
 import { persistHandoff } from "../../scripts/persist-handoff.mjs";
+import { persistTmp } from "../../scripts/persist-tmp.mjs";
 import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
 
@@ -32,9 +33,9 @@ export const ORCHESTRATOR_LOGS_DIR = ".tmp/orchestrator-logs";
 export const DENY_REASON =
   "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
-  "Spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
-  "Still spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
-  "Last spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover 1./2. each on own line after.",
+  "Spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
+  "Still spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
+  "Last spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
@@ -64,6 +65,7 @@ const PARENT_SKILLS = new Set([
   "solo",
   "cascade",
   "handoff",
+  "tmp",
   "pickup",
   "write-plan",
   "implement-plan",
@@ -205,6 +207,10 @@ export function isUnderHandoffs(filePath, workspaceRoot) {
   return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "handoffs"]);
 }
 
+export function isUnderTmp(filePath, workspaceRoot) {
+  return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "tmp"]);
+}
+
 export function isAllowedParentGruntJob(command, workspaceRoot) {
   return isWorkspaceGruntJob(command, workspaceRoot, ["search", "exec"]);
 }
@@ -258,7 +264,8 @@ function parentWrite(data, toolInput) {
   const rewritten = rewriteGruntScratchPath(rawPath, ws);
   if (rewritten) rawPath = rewritten;
   const handoff = isUnderHandoffs(rawPath, ws);
-  if (!handoff && !isUnderPlans(rawPath, ws)) {
+  const tmp = isUnderTmp(rawPath, ws);
+  if (!handoff && !tmp && !isUnderPlans(rawPath, ws)) {
     if (hasParentEscape(data)) {
       emit({ decision: "allow" });
       return 0;
@@ -267,12 +274,14 @@ function parentWrite(data, toolInput) {
     return 0;
   }
   const content = typeof toolInput.content === "string" ? toolInput.content : "";
-  const persist = handoff ? persistHandoff : persistPlan;
+  const persist = handoff ? persistHandoff : tmp ? persistTmp : persistPlan;
   const result = persist({ workspaceRoot: ws, content });
   if (!result.ok) {
     emit({
       decision: "deny",
-      reason: result.error || (handoff ? "invalid handoff" : "invalid plan"),
+      reason:
+        result.error ||
+        (handoff ? "invalid handoff" : tmp ? "invalid tmp" : "invalid plan"),
     });
     return 0;
   }
@@ -352,7 +361,7 @@ function userPromptSubmit(data) {
 }
 
 const RECAP_TAG_RE =
-  /^\[(?:orchestrator|grunt|implementer|thinker|handoff)\]:/;
+  /^\[(?:orchestrator|grunt|implementer|thinker|handoff|tmp)\]:/;
 const WAIT_GRUNT = "[orchestrator]: wait grunt";
 
 function firstNonEmptyStripped(msg) {

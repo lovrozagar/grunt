@@ -7,8 +7,9 @@ description: >
 when-to-use: >
   Use when asked to "write a plan", "make a checklist plan",
   "plan this for implementer", or "/write-plan". Not leftover pick 2
-  as a Skill-name (`2` / "file plan" is always-do: this persist then
-  implement-plan one-shot).
+  as a Skill-name. Implement-typed `2` / "file plan" is always-do: this
+  persist then implement-plan one-shot. Write-typed `2` is this persist
+  inspect-pause; remainder `/implement-plan {n}`; no implementer.
 argument-hint: "<task or context>"
 ---
 
@@ -85,4 +86,6 @@ Do not dump the plan.
 - Not `/design`, not `/execute-plan`, not a design doc.
 - Tool-call first: emit `spawn_subagent` in the same turn as any spawn claim. Past tense after the tool result.
 - Slash `/write-plan` = persist-only inspect-pause; remainder ask `/implement-plan {n}`. Not leftover pick 2.
-- Leftover pick 2 (`Implementer with file plan`) = this persist then implement-plan one-shot; skip inspect pause; no user slash. Always-do leftover match; leftover `2` ≠ Skill-name invoke of this skill. Parent still no Write — this skill sequencing.
+- Implement leftover pick 2 (`Implement with file plan`) = this persist then implement-plan one-shot; skip inspect pause; no user slash.
+- Write leftover pick 2 (`Write with file plan`) = this persist inspect-pause; remainder `/implement-plan {n}`; no implementer this turn.
+- Always-do leftover match; leftover `2` ≠ Skill-name invoke of this skill. Parent still no Write — this skill sequencing.

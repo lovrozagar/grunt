@@ -104,8 +104,8 @@ leftover:
 ## Rules
 
 - Skip `[x]`; only flip boxes; no renumber/rewrite leaf text.
-- No review-fix loop. Not bundled `/implement`. Leftover pick 1 (verbal plan) ≠ this skill (no `.tmp/plans`; no write-plan; no implement-plan). Bare `implement`/`implementer` → pick1, not this skill.
-- Slash `/implement-plan {n}` = disk/file run. Empty `/implement-plan` = unique-resume / unique-start / else list. Leftover pick 2 may invoke this sequencing without user slash (after write-plan persist; `plan=/abs/...` only). Always-do leftover match; leftover `2` ≠ Skill-name. Verbal leftover ≠ implement-plan.
+- No review-fix loop. Not bundled `/implement`. Implement leftover pick 1 (`Implement with verbal plan`) ≠ this skill (no `.tmp/plans`; no write-plan; no implement-plan). Bare `implement`/`implementer` → pick1 iff Implement-typed, not this skill; else recap “no implementer this remainder”.
+- Slash `/implement-plan {n}` = disk/file run. Empty `/implement-plan` = unique-resume / unique-start / else list. Implement leftover pick 2 may invoke this sequencing without user slash (after write-plan persist; `plan=/abs/...` only). Write leftover pick 2 does not spawn implementer this turn. Always-do leftover match; leftover `2` ≠ Skill-name. Verbal leftover ≠ implement-plan.
 - No auto `/write-plan` chain. Escalation → tell user to `/write-plan` a follow-up.
 - Omit `model`. `subagent_type: implementer` only for this skill.
 - First prompt sentence: `You are implementer subagent.`

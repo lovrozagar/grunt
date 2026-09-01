@@ -17,4 +17,5 @@
 | parent | local | One-turn parent-orchestrator escape. Use for /parent. Not a session mode. |  |  |  |
 | pickup | local | Pick up/continue a session handoff under .tmp/grunt/handoffs/. Use for /pickup, pick up, continue handoff, serial, drag… |  |  |  |
 | solo | local | Session mode. /solo disables the grunt cascade for this session — one normal agent, no spawn, no orchestrator. /cascade… |  |  |  |
+| tmp | local | One-off convo artifact dump under .tmp/grunt/tmp/. Use for /tmp, dump a draft, save a note/email/script from this sessi… |  |  |  |
 | write-plan | local | Thinker drafts a local implementer-ready checklist plan; parent Write persists .tmp/plans/{serial}-{slug}-{YYYYMMDDTHHM… |  |  |  |

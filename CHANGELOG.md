@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-09-01
+
+### Added
+
+- `/tmp` skill (host mirrors) + `scripts/persist-tmp.mjs` (+ tests): one-off convo artifacts under `.tmp/grunt/tmp/`; Grok `orchestrate-parent.js` persist rewrite; Stop tag `[tmp]:`
+- Typed advise leftover triple: `{Implement|Write} with verbal|file plan` + `Tweak` — Implement pick1/pick2 still spawn implementer; Write pick1 = `/tmp` persist (no implementer); Write pick2 = write-plan inspect-pause then `/implement-plan {n}` (no implementer this turn); type-mismatch / bare `implement` on Write-typed = no spawn
+- Owned-defect after grunt: in-tree/package defect → thinker `Fix {path}` leftover (not fact-stop); workaround stays why-clause
+
+### Changed
+
+- Consumer npm scripts prefixed `grunt:<SoT-key>` (`grunt:rulesync:generate`, `grunt:doctor`, …); init migrates owned unprefixed keys + `npm run` refs; SoT repo scripts stay unprefixed; no aliases — CI/husky must switch
+- `package.json` `files` publishes `persist-tmp.mjs`; README documents `/tmp`, typed leftover, and consumer script rename
+- Cascade/output/write-plan/implement-plan/orchestrator/thinker (and host mirrors) aligned to typed leftover + `/tmp`
+
 ## [0.5.0] - 2026-09-01
 
 ### Added

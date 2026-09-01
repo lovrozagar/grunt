@@ -11,6 +11,7 @@ import {
   isAllowedParentGruntJob,
 } from "../.grok/hooks/orchestrate-parent.js";
 import { VALID_HANDOFF } from "./persist-handoff.test.ts";
+import { VALID_TMP } from "./persist-tmp.test.ts";
 import { VALID_THINKER } from "./persist-plan.test.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -144,6 +145,23 @@ describe("orchestrate-parent Stop", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("allows a [tmp]: recap", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage:
+          "[tmp]: serial=1 path=.tmp/grunt/tmp/1-x-20260827T143000Z.md\n",
+        workspaceRoot: ws,
+        sessionId: "s-tmp",
+      },
+      { GROK_HOOK_EVENT: "stop", GROK_WORKSPACE_ROOT: ws, GROK_SESSION_ID: "s-tmp" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
   it("allows a [handoff]: recap", () => {
     const ws = workspace();
     const result = runHook(
@@ -183,7 +201,7 @@ describe("orchestrate-parent Stop", () => {
 
   it("allows role tags [grunt]: [implementer]: [thinker]: [handoff]:", () => {
     const ws = workspace();
-    for (const tag of ["grunt", "implementer", "thinker", "handoff"] as const) {
+    for (const tag of ["grunt", "implementer", "thinker", "handoff", "tmp"] as const) {
       const sid = `s-role-${tag}`;
       const result = runHook(
         {
@@ -412,7 +430,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: advise stop\n1. Implementer with verbal plan\n2. Implementer with file plan\n3. Tweak",
+          "[orchestrator]: advise stop\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-advise-leftover",
       },
@@ -426,6 +444,27 @@ describe("orchestrate-parent Stop", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("allows tagged recap plus Write leftover triple (hook format-only)", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "Stop",
+        reason: "end_turn",
+        lastAssistantMessage:
+          "[orchestrator]: advise-only how. Remainder persist note.\n1. Write with verbal plan\n2. Write with file plan\n3. Tweak",
+        workspaceRoot: ws,
+        sessionId: "s-write-leftover",
+      },
+      {
+        GROK_HOOK_EVENT: "stop",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "s-write-leftover",
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
   it("blocks [orchestrator]: wait grunt with leftover lines", () => {
     const ws = workspace();
     const result = runHook(
@@ -433,7 +472,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: wait grunt\n1. Implementer with verbal plan\n2. Implementer with file plan\n3. Tweak",
+          "[orchestrator]: wait grunt\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-wait-leftover",
       },
@@ -447,9 +486,13 @@ describe("orchestrate-parent Stop", () => {
     expect(JSON.parse(result.stdout).decision).toBe("block");
   });
 
-  it("parent SSOT un-cramps advise 1./2./3. onto own lines", () => {
-    const leftover =
-      /1\. Implementer with verbal plan\n2\. Implementer with file plan\n3\. Tweak/;
+  it("parent SSOT un-cramps typed leftover triples; always-print; no omit-1/2", () => {
+    const leftoverTemplate =
+      /1\. \{Implement\|Write\} with verbal plan\n2\. \{same verb\} with file plan\n3\. Tweak/;
+    const implementTriple =
+      /1\. Implement with verbal plan\n2\. Implement with file plan\n3\. Tweak/;
+    const writeTriple =
+      /1\. Write with verbal plan\n2\. Write with file plan\n3\. Tweak/;
     const files = [
       ".rulesync/reference/output.md",
       ".rulesync/reference/cascade.md",
@@ -462,10 +505,36 @@ describe("orchestrate-parent Stop", () => {
       const text = fs.readFileSync(path.join(root, rel), "utf8");
       expect(text).not.toMatch(/1\. Implement\n2\. Tweak/);
       expect(text).not.toMatch(
-        /Advise finals: 1\. Implementer with verbal plan 2\. Implementer with file plan 3\. Tweak/,
+        /Advise finals: 1\. Implement(?:er)? with verbal plan 2\. Implement(?:er)? with file plan 3\. Tweak/,
       );
-      expect(text).toMatch(leftover);
+      expect(text).toMatch(leftoverTemplate);
+      expect(text).toMatch(/always-print typed leftover triple|Always-print typed leftover triple/);
+      expect(text).not.toMatch(/omit-not-relabel|Else omit 1 and 2|Keep 3 on advise-class|Optional `?4\+`|omit invalid kinds/);
+      expect(text).not.toMatch(/^\s*4\. Write plan/m);
+      expect(text).not.toMatch(/^\s*4\. Contact bank/m);
+      expect(text).not.toMatch(/still adds numbered pick/);
     }
+    const output = fs.readFileSync(
+      path.join(root, ".rulesync/reference/output.md"),
+      "utf8",
+    );
+    const cascade = fs.readFileSync(
+      path.join(root, ".rulesync/reference/cascade.md"),
+      "utf8",
+    );
+    expect(output).toMatch(implementTriple);
+    expect(output).toMatch(writeTriple);
+    expect(output).toMatch(/echoes printed leftover/i);
+    expect(output).toMatch(/no implementer this remainder/);
+    expect(output).toMatch(/Leftover ⊆ remainder kinds|leftover ⊆ remainder/i);
+    expect(output).toMatch(/Type Implement/);
+    expect(output).toMatch(/Type Write/);
+    expect(cascade).toMatch(/echoes printed leftover|echo printed/i);
+    expect(cascade).toMatch(/type-mismatch|Type-mismatch/);
+    expect(STOP_REASONS.join("\n")).not.toMatch(/leftover 1\.\/2\./);
+    expect(STOP_REASONS.join("\n")).toMatch(/echo printed/);
+    expect(STOP_REASONS.join("\n")).not.toMatch(/omit invalid kinds|Implementer with/);
+    expect(STOP_REASONS.join("\n")).toMatch(/always-print typed triple/);
   });
 
   it("allows [orchestrator]: wait grunt", () => {
@@ -744,6 +813,24 @@ describe("orchestrate-parent Stop", () => {
     }
     expect(ssot).toMatch(/`\/pickup \{serial\}`/);
     expect(ssot).not.toMatch(/resume-handoff/);
+  });
+
+  it("tmp skill ships to every host from one SSOT", () => {
+    const ssot = fs.readFileSync(
+      path.join(root, ".rulesync/skills/tmp/SKILL.md"),
+      "utf8",
+    );
+    expect(ssot).toMatch(/^name: tmp$/m);
+    expect(ssot).toMatch(/\.tmp\/grunt\/tmp\//);
+    expect(ssot).toMatch(/\[tmp\]: serial=/);
+    expect(ssot).not.toMatch(/\/pickup/);
+    for (const rel of [
+      ".grok/skills/tmp/SKILL.md",
+      ".claude/skills/tmp/SKILL.md",
+      ".agents/skills/tmp/SKILL.md",
+    ]) {
+      expect(fs.readFileSync(path.join(root, rel), "utf8")).toBe(ssot);
+    }
   });
 
   it("pickup skill ships to every host from one SSOT", () => {
@@ -1069,6 +1156,55 @@ describe("orchestrate-parent parent write", () => {
       /^---\nserial: 1\nname: sync-skills-to-hosts\nstatus: open\n/,
     );
     expect(out.decision).toBeUndefined();
+  });
+
+  it("allows .tmp/grunt/tmp/ write and rewrites serial path without YAML", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/grunt/tmp/draft.md"),
+          content: VALID_TMP,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(result.status).toBe(0);
+    const out = JSON.parse(result.stdout);
+    expect(out.hookSpecificOutput.updatedInput.file_path).toMatch(
+      new RegExp(
+        `${path
+          .join(ws, ".tmp/grunt/tmp/1-bank-email-draft-")
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
+      ),
+    );
+    expect(out.hookSpecificOutput.updatedInput.content).not.toMatch(/^---/);
+    expect(out.hookSpecificOutput.updatedInput.content).not.toContain("TMP_NAME:");
+    expect(out.hookSpecificOutput.updatedInput.content).toContain("Subject: hello");
+    expect(out.decision).toBeUndefined();
+  });
+
+  it("denies invalid tmp under .tmp/grunt/tmp/", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/grunt/tmp/bad.md"),
+          content: "no name line\n",
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      decision: "deny",
+      reason: "missing TMP_NAME",
+    });
   });
 
   it("denies invalid handoff under .tmp/grunt/handoffs/", () => {
@@ -2095,7 +2231,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
       toolInput: { skill: "write-plan" },
     });
     expect(JSON.parse(writePlan.stdout)).toMatchObject({ decision: "allow" });
-    for (const skill of ["explain", "parent", "pickup", "handoff"]) {
+    for (const skill of ["explain", "parent", "pickup", "handoff", "tmp"]) {
       const allowed = pre(ws, {
         toolName: "Skill",
         toolInput: { skill },

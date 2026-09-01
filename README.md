@@ -55,7 +55,7 @@ Exit 1 if any required missing; 0 if all required ok. Optional `gh` reported onl
 | chromium-family | yes | linux `sudo apt install chromium` · mac `brew install --cask chromium` or `google-chrome` · win `winget install Google.Chrome` / `Microsoft.Edge` + PATH |
 | gh | no | report only |
 
-Rulesync schema doctor is separate: `npm run rulesync:doctor`.
+Rulesync schema doctor is separate: `npm run grunt:rulesync:doctor`.
 
 ## Usage
 
@@ -67,12 +67,12 @@ Rulesync schema doctor is separate: `npm run rulesync:doctor`.
 
 ### Commands
 
-- `init` → `init()` — merge SoT, `npm install`, `rulesync:generate`, `sync:globals:apply`, `rulesync:check`
-- `generate` → `npm run rulesync:generate`
-- `check` → `npm run rulesync:check`
-- `sync-globals` → `npm run sync:globals` (dry-run); `--apply` → `sync:globals:apply`
-- `purge-mcps` → `npm run purge:global-mcps` (dry-run); `--apply` → `purge:global-mcps:apply`
-- `doctor` → `npm run doctor` (`node scripts/doctor.mjs`). Rulesync schema: `npm run rulesync:doctor`
+- `init` → `init()` — merge SoT, `npm install`, `grunt:rulesync:generate`, `grunt:sync:globals:apply`, `grunt:rulesync:check`
+- `generate` → `npm run grunt:rulesync:generate`
+- `check` → `npm run grunt:rulesync:check`
+- `sync-globals` → `npm run grunt:sync:globals` (dry-run); `--apply` → `grunt:sync:globals:apply`
+- `purge-mcps` → `npm run grunt:purge:global-mcps` (dry-run); `--apply` → `grunt:purge:global-mcps:apply`
+- `doctor` → `npm run grunt:doctor` (`npx grunt doctor` / `node scripts/doctor.mjs` stay). Rulesync schema: `npm run grunt:rulesync:doctor`
 - `help`
 - `version`
 
@@ -85,11 +85,12 @@ Rulesync schema doctor is separate: `npm run rulesync:doctor`.
 
 ## Init
 
-- Merge SoT `npm install` `rulesync:generate` `sync:globals:apply` `rulesync:check`
+- Merge SoT `npm install` `grunt:rulesync:generate` `grunt:sync:globals:apply` `grunt:rulesync:check`
 - `--skip-globals` skips apply
 - Re-init auto-skips globals when `<!-- grunt:begin -->` in `AGENTS.md`/`CLAUDE.md`
 - First init (no sentinel) applies globals unless flagged
 - Owned trees/scripts refresh; extra `.rulesync` files kept; patches to grunt-owned files lost
+- Breaking: consumer npm scripts are `grunt:<SoT-key>` (`grunt:rulesync:generate`, `grunt:doctor`). Re-init migrates `package.json` (owned unprefixed keys + suffixes; `npm run` refs in other dest scripts). CI/husky/`npm run rulesync:*` / `npm run doctor` must switch. No aliases. SoT repo scripts stay unprefixed (`npm run rulesync:generate`).
 
 ## Version bump
 
@@ -105,7 +106,7 @@ SoT: `.rulesync/subagents/{orchestrator grunt implementer thinker}.md`
 
 Emit: `.claude/` `.grok/` `.agents/` `.gemini/`
 
-- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap (do not cram `1. Implementer with verbal plan 2. Implementer with file plan 3. Tweak` onto the recap line). `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
+- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap (do not cram `1. Implementer with verbal plan 2. Implementer with file plan 3. Tweak` onto the recap line). `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/tmp` writes `.tmp/grunt/tmp/{serial}-{slug}-{stamp}.{ext}`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
 - **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation `verdict:`. Never feature solution. Never spawn. World fact: `job: web`
 - **implementer** — write already-defined solution on allowlisted paths. TDD when spec/plan says tests. Validate + sim after write. Fat dumps via `need:`. Never spawn. Never plan. Id is **implementer** (not Implementor)
 - **thinker** — think/plan/advise/recommend/how/why/explain; unsure→thinker; cheap false+; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
@@ -122,7 +123,7 @@ Lightpanda-first session CLI: `node scripts/browser.mjs nav|snap|click|fill|shot
 
 Present under `.claude` / `.rulesync` / `.agents` / `.grok` (`rulesync -f skills` mirrors SSOT):
 
-- `browser` `cascade` `commit` `commit-and-push` (1-release alias → `commit-push`) `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo` `write-plan` `implement-plan`
+- `browser` `cascade` `commit` `commit-and-push` (1-release alias → `commit-push`) `commit-push` `commit-push-deploy` `commit-push-release` `explain` `handoff` `pickup` `parent` `solo` `tmp` `write-plan` `implement-plan`
 
 Reserved names: do not reuse those stems for consumer custom skills. Same name → one SSOT under `.rulesync/skills/<name>/`; re-init force-refresh overwrites grunt-owned names; extras kept; maps `origin` badge ≠ content picker. See `.rulesync/reference/law.md` (flows into INDEX).
 
@@ -337,7 +338,7 @@ Repo-relative (repository root):
 
 ## Layout
 
-Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/guarded-roots.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/pipeline.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE` `CHANGELOG.md`
+Published (`package.json` `files`): `bin/grunt.js` `cli` `scripts/check-globals.mjs` `scripts/emit-agent-shell-tools.mjs` `scripts/emit-gemini.mjs` `scripts/guarded-roots.mjs` `scripts/emit-mcp-policy.mjs` `scripts/gate-fat-tools.mjs` `scripts/hooks-union.mjs` `scripts/pipeline.mjs` `scripts/grunt-job.mjs` `scripts/parse-need.mjs` `scripts/persist-handoff.mjs` `scripts/persist-tmp.mjs` `scripts/persist-plan.mjs` `scripts/purge-global-mcps.mjs` `scripts/scrub-spawn-prompt.mjs` `scripts/scrub-text-lib.mjs` `scripts/sync-global-settings.mjs` `scripts/browser.mjs` `scripts/doctor.mjs` `scripts/scrub-text` `.rulesync` `.grok` `.codex` `.claude` `.agents` `AGENTS.md` `CLAUDE.md` `.mcp.json` `README.md` `LICENSE` `CHANGELOG.md`
 
 No `scripts/*.test.ts` `scripts/fixtures/` `docs/` `coverage/` `vitest.config.ts` in `files`. `cli` dir ships whole (includes `cli/*.test.ts`).
 

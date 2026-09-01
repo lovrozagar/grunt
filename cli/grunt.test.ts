@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const init = vi.hoisted(() => vi.fn());
 const destAlreadyInited = vi.hoisted(() => vi.fn(() => false));
 const shouldAutoSkipGlobals = vi.hoisted(() => vi.fn(() => false));
+const toGruntScriptName = vi.hoisted(
+  () => (k) => (String(k).startsWith("grunt:") ? k : `grunt:${k}`),
+);
 const execFileSync = vi.hoisted(() => vi.fn());
 const isInteractive = vi.hoisted(() => vi.fn(() => false));
 const select = vi.hoisted(() => vi.fn());
@@ -15,7 +18,13 @@ const spinner = vi.hoisted(() =>
 );
 const bailIfCancel = vi.hoisted(() => vi.fn((v) => v));
 
-vi.mock("./init.mjs", () => ({ init, destAlreadyInited, shouldAutoSkipGlobals }));
+vi.mock("./init.mjs", () => ({
+  init,
+  destAlreadyInited,
+  shouldAutoSkipGlobals,
+  toGruntScriptName,
+  GRUNT_NPM_PREFIX: "grunt:",
+}));
 vi.mock("node:child_process", () => ({ execFileSync }));
 vi.mock("./prompt.mjs", () => ({
   isInteractive,
@@ -32,12 +41,12 @@ const USAGE = `Usage: grunt [command]
 Default (no command): TTY menu; else init — full setup
 
 Commands:
-  init          Full setup: merge SoT, npm install, rulesync:generate, sync:globals:apply, rulesync:check
-  generate      npm run rulesync:generate
-  check         npm run rulesync:check
-  sync-globals  npm run sync:globals (dry-run; --apply to write)
-  purge-mcps    npm run purge:global-mcps (dry-run; --apply to write)
-  doctor        npm run doctor
+  init          Full setup: merge SoT, npm install, grunt:rulesync:generate, grunt:sync:globals:apply, grunt:rulesync:check
+  generate      npm run grunt:rulesync:generate
+  check         npm run grunt:rulesync:check
+  sync-globals  npm run grunt:sync:globals (dry-run; --apply to write)
+  purge-mcps    npm run grunt:purge:global-mcps (dry-run; --apply to write)
+  doctor        npm run grunt:doctor
   help          Show this help
   version       Print package version
 
@@ -148,22 +157,22 @@ describe("start", () => {
     },
   );
 
-  it("generate npm-runs rulesync:generate", async () => {
+  it("generate npm-runs grunt:rulesync:generate", async () => {
     process.argv = ["node", "grunt", "generate"];
     await start();
     expect(execFileSync).toHaveBeenCalledOnce();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:generate"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:rulesync:generate"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
     expect(init).not.toHaveBeenCalled();
   });
 
-  it("check npm-runs rulesync:check", async () => {
+  it("check npm-runs grunt:rulesync:check", async () => {
     process.argv = ["node", "grunt", "check"];
     await start();
     expect(execFileSync).toHaveBeenCalledOnce();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:check"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:rulesync:check"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
@@ -173,7 +182,7 @@ describe("start", () => {
     process.argv = ["node", "grunt", "sync-globals", "--yes"];
     await start();
     expect(execFileSync).toHaveBeenCalledOnce();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "sync:globals"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:sync:globals"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
@@ -184,7 +193,7 @@ describe("start", () => {
     await start();
     expect(execFileSync).toHaveBeenCalledWith(
       "npm",
-      ["run", "sync:globals", "--", "--host", "grok"],
+      ["run", "grunt:sync:globals", "--", "--host", "grok"],
       { cwd: process.cwd(), stdio: "inherit" },
     );
   });
@@ -194,7 +203,7 @@ describe("start", () => {
     await start();
     expect(execFileSync).toHaveBeenCalledWith(
       "npm",
-      ["run", "sync:globals:apply", "--", "--host", "grok"],
+      ["run", "grunt:sync:globals:apply", "--", "--host", "grok"],
       { cwd: process.cwd(), stdio: "inherit" },
     );
   });
@@ -212,7 +221,7 @@ describe("start", () => {
     await start();
     expect(execFileSync).toHaveBeenCalledWith(
       "npm",
-      ["run", "sync:globals", "--", "--host", "claude"],
+      ["run", "grunt:sync:globals", "--", "--host", "claude"],
       { cwd: process.cwd(), stdio: "inherit" },
     );
   });
@@ -220,7 +229,7 @@ describe("start", () => {
   it("purge-mcps dry-run default", async () => {
     process.argv = ["node", "grunt", "purge-mcps"];
     await start();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "purge:global-mcps"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:purge:global-mcps"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
@@ -231,15 +240,15 @@ describe("start", () => {
     await start();
     expect(execFileSync).toHaveBeenCalledWith(
       "npm",
-      ["run", "purge:global-mcps:apply"],
+      ["run", "grunt:purge:global-mcps:apply"],
       { cwd: process.cwd(), stdio: "inherit" },
     );
   });
 
-  it("doctor npm-runs doctor", async () => {
+  it("doctor npm-runs grunt:doctor", async () => {
     process.argv = ["node", "grunt", "doctor"];
     await start();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "doctor"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:doctor"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });
@@ -285,7 +294,7 @@ describe("start", () => {
     select.mockResolvedValue("generate");
     process.argv = ["node", "grunt"];
     await start();
-    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "rulesync:generate"], {
+    expect(execFileSync).toHaveBeenCalledWith("npm", ["run", "grunt:rulesync:generate"], {
       cwd: process.cwd(),
       stdio: "inherit",
     });

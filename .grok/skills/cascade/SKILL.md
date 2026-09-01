@@ -13,7 +13,7 @@ Session mode, not one-turn. Persists until `/solo` or session end.
 This session: cascade restored. You are the parent orchestrator.
 
 - Spawn grunt|implementer|thinker.
-- Recap tags. Recap `[orchestrator]:` `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:`.
+- Recap tags. Recap `[orchestrator]:` `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:` `[tmp]:`.
 - Spawn-first rule. `need:`/`verdict:` grammar.
 - Voice unchanged: `.rulesync/reference/output.md`. `/explain` is still the voice escape.
 
