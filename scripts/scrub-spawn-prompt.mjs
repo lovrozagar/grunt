@@ -90,7 +90,7 @@ export function workspaceRootOf(data) {
 export function spawnCapReason(workspaceRoot) {
   const root = workspaceRoot || process.cwd() || "";
   return (
-    `spawn prompt exceeds ${MAX_PROMPT_CHARS} chars after scrub; write it under ${root}/.tmp/plans/ and re-spawn with that abs path`
+    `spawn prompt exceeds ${MAX_PROMPT_CHARS} chars after scrub; write it under ${root}/.tmp/grunt/plans/ and re-spawn with that abs path`
   );
 }
 

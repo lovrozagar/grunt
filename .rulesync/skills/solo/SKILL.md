@@ -16,8 +16,10 @@ This session: cascade suspended. You are one normal agent.
 
 Fat-tool caps stay on — token guards, not cascade.
 
-Claude/Codex/Grok: `/solo` via submit hook writes `.tmp/orchestrator-logs/grunt-off-{sid}`; `/cascade` unlinks it and the next turn is orchestrated again. Agents/Antigravity: instruction-only (this skill body); cannot create stamp via `/solo`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
+Effective spawn: stamp body `solo`|`cascade` > one-release `grunt-off-{sid}` presence as solo > `.rulesync/grunt.config.jsonc` `spawnMode` > `cascade`. Fail-closed `cascade`. Unreadable/bad stamp body ignored (dual-read grunt-off else config). Never fail-closed solo.
 
-This is the only session-wide spawn-workflow escape. /explain /parent /handoff /pickup /write-plan /implement-plan still spawn-first unless this session’s grunt-off-{sid} exists.
+Claude/Codex/Grok: `/solo` via submit hook. If slash token equals committed config `spawnMode`, unlink `.tmp/grunt/orchestrator-logs/spawn-mode-{sid}`; else write stamp body `solo`. Always unlink `grunt-off-{sid}` (new+legacy). Requires real sid (never `default`). Agents/Antigravity: instruction-only (this skill body); cannot create stamp via `/solo`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
 
-Spawn-escape only. Not advisory/design routing.
+This is the only session-wide spawn-workflow escape. /explain /parent /handoff /pickup /write-plan /implement-plan still spawn-first unless this session’s effective spawn is solo.
+
+Spawn-escape only. Not advisory/design routing. Leftover-gate `/auto`/`/ask` is not spawn-escape.

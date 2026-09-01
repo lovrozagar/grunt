@@ -19,7 +19,7 @@ effort: medium
 ---
 Voice: `.rulesync/reference/output.md` — must follow.
 
-Implement specified solution. User prompt may be the spec; `.tmp/plans` not required for small/defined writes. Never spawn. Never run for simple tool usage (grunt agent). Never plan/advise (thinker agent). Never how/why/explain judgment.
+Implement specified solution. User prompt may be the spec; `.tmp/grunt/plans` not required for small/defined writes. Never spawn. Never run for simple tool usage (grunt agent). Never plan/advise (thinker agent). Never how/why/explain judgment.
 After write: validate+sim (mandatory). Fix hard failures. Return findings. Never skip validation
 DOM ⚠ → `node scripts/browser.mjs snap`. Visual ⚠ → `node scripts/browser.mjs shot`.
 Read/Grep/list_dir only if needed for edit. Prefer: implement the spec; dump via `need:`.

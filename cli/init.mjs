@@ -21,6 +21,7 @@ const PRODUCT_SCRIPTS = [
   "hooks-union.mjs",
   "pipeline.mjs",
   "grunt-job.mjs",
+  "grunt-config.mjs",
   "parse-need.mjs",
   "persist-handoff.mjs",
   "persist-tmp.mjs",
@@ -45,13 +46,24 @@ export const GRUNT_NPM_PREFIX = "grunt:"
 export function toGruntScriptName(k) {
   return k.startsWith(GRUNT_NPM_PREFIX) ? k : `${GRUNT_NPM_PREFIX}${k}`
 }
+export const LAUNCH_SCRIPTS = {
+  antigravity: "antigravity --dangerously-skip-permissions",
+  claude: "claude --dangerously-skip-permissions",
+  codex: "codex --dangerously-bypass-approvals-and-sandbox",
+  gemini: "gemini --yolo",
+  grok: "grok --yolo",
+}
 const OWNED_HOOK_FILES = ["scrub-spawn-prompt.mjs", "gate-fat-tools.mjs", "orchestrate-parent.js"]
 export const SENTINEL_BEGIN = "<!-- grunt:begin -->"
 export const SENTINEL_END = "<!-- grunt:end -->"
 export const MAX_GUARDED_MARKDOWN_BYTES = 2 * 1024 * 1024
-const GRUNT_REGION_RE = /<!-- grunt:begin -->\r?\n?[\s\S]*?<!-- grunt:end -->\r?\n?/g
-const GRUNT_INTERIOR_RE = /<!-- grunt:begin -->\r?\n?([\s\S]*?)<!-- grunt:end -->/g
+const GRUNT_REGION_RE =
+  /(?:^|(?<=\n)|(?<=\r\n))[ \t]*<!-- grunt:begin -->[ \t]*\r?\n?[\s\S]*?(?:^|(?<=\n)|(?<=\r\n))[ \t]*<!-- grunt:end -->[ \t]*\r?\n?/g
+const GRUNT_INTERIOR_RE =
+  /(?:^|(?<=\n)|(?<=\r\n))[ \t]*<!-- grunt:begin -->[ \t]*\r?\n?([\s\S]*?)(?:^|(?<=\n)|(?<=\r\n))[ \t]*<!-- grunt:end -->/g
 const ORPHAN_END_RE = /(?:^|\r?\n)[ \t]*<!-- grunt:end -->[ \t]*(?=\r?\n|$)|<!-- grunt:end -->/g
+const BEGIN_LINE_RE = /^[ \t]*<!-- grunt:begin -->[ \t]*$/
+const END_LINE_RE = /^[ \t]*<!-- grunt:end -->[ \t]*$/
 
 function sortKeys(obj) {
   return Object.fromEntries(Object.keys(obj).sort().map((k) => [k, obj[k]]))
@@ -131,18 +143,36 @@ export function extractUserMarkdown(text) {
   return userRemainderIsBlank(user) ? "" : user
 }
 
+function unwrapStackedMarkers(text) {
+  const lines = String(text).split(/\r?\n/)
+  let start = 0
+  let end = lines.length
+  while (start < end && BEGIN_LINE_RE.test(lines[start])) start++
+  while (end > start && lines[end - 1] === "") end--
+  while (end > start && END_LINE_RE.test(lines[end - 1])) {
+    end--
+    while (end > start && lines[end - 1] === "") end--
+  }
+  return lines.slice(start, end).join("\n")
+}
+
 export function extractGruntBody(text) {
-  const parts = []
   const src = String(text)
+  const parts = []
   const re = cloneRe(GRUNT_INTERIOR_RE)
   let m
   while ((m = re.exec(src))) {
-    parts.push(trimTrailingNewlines(m[1]))
+    parts.push(trimTrailingNewlines(unwrapStackedMarkers(m[1])))
   }
   if (parts.length) return parts.join("\n")
   const i = src.indexOf(SENTINEL_BEGIN)
-  if (i < 0) return null
-  return trimTrailingNewlines(src.slice(i + SENTINEL_BEGIN.length).replace(/^\r?\n/, ""))
+  if (i >= 0) {
+    return trimTrailingNewlines(
+      unwrapStackedMarkers(src.slice(i + SENTINEL_BEGIN.length).replace(/^[ \t]*\r?\n/, "")),
+    )
+  }
+  if (!src.includes(SENTINEL_END)) return null
+  return trimTrailingNewlines(unwrapStackedMarkers(src))
 }
 
 function userRemainderIsBlank(user) {
@@ -384,14 +414,11 @@ function extraOwnedSuffix(cur, newSrc) {
   return null
 }
 
-function mergeScriptValue(name, newSrc, cur) {
-  if (cur == null) return newSrc
+function mergeScriptValue(newSrc, cur) {
   if (cur.startsWith(newSrc)) return cur
   const suffix = extraOwnedSuffix(cur, newSrc)
   if (suffix != null) return newSrc + suffix
-  if (name.startsWith(GRUNT_NPM_PREFIX) || looksGruntOwnedPrefix(cur)) return newSrc
-  console.warn(`script \`${name}\` left untouched (unrelated customization)`)
-  return cur
+  return newSrc
 }
 
 function rewriteNpmRunRefs(scripts, srcKeys) {
@@ -424,18 +451,18 @@ export function mergePackageJson(dest, pkgRoot) {
   destPkg.scripts = { ...(destPkg.scripts || {}) }
   const srcKeys = []
   for (const [k, v] of Object.entries(srcPkg.scripts || {})) {
-    if (k === "test" || k.endsWith(":raw")) continue
+    if (k === "test" || k.endsWith(":raw") || k in LAUNCH_SCRIPTS) continue
     srcKeys.push(k)
     const destKey = toGruntScriptName(k)
     const current = destPkg.scripts[destKey]
-    const legacy = k !== destKey ? destPkg.scripts[k] : undefined
+    const legacy = destPkg.scripts[k]
     const ownedLegacy =
       legacy != null &&
       (legacy.startsWith(v) || extraOwnedSuffix(legacy, v) != null || looksGruntOwnedPrefix(legacy))
     if (current != null) {
-      destPkg.scripts[destKey] = mergeScriptValue(destKey, v, current)
+      destPkg.scripts[destKey] = mergeScriptValue(v, current)
     } else if (ownedLegacy) {
-      destPkg.scripts[destKey] = mergeScriptValue(destKey, v, legacy)
+      destPkg.scripts[destKey] = mergeScriptValue(v, legacy)
     } else {
       destPkg.scripts[destKey] = v
     }
@@ -446,6 +473,13 @@ export function mergePackageJson(dest, pkgRoot) {
         `script \`${k}\` left untouched (unrelated customization); writing \`${destKey}\``,
       )
     }
+  }
+  for (const [k, v] of Object.entries(LAUNCH_SCRIPTS)) {
+    const destKey = toGruntScriptName(k)
+    const current = destPkg.scripts[destKey]
+    destPkg.scripts[destKey] = current != null ? mergeScriptValue(v, current) : v
+    const staleKey = `grunt:yolo:${k}`
+    if (destPkg.scripts[staleKey] === v) delete destPkg.scripts[staleKey]
   }
   rewriteNpmRunRefs(destPkg.scripts, srcKeys)
   destPkg.devDependencies = { ...(destPkg.devDependencies || {}) }

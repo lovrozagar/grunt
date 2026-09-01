@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.2] - 2026-09-02
+
+### Added
+
+- `/ask` and `/auto` session leftover-gate skills (SoT + `.agents` / `.claude` / `.grok` mirrors)
+- `.rulesync/grunt.config.jsonc` and `scripts/grunt-config.mjs` for `leftoverGate` / `spawnMode` (fail-closed defaults)
+- Orchestrator session stamps for auto-ask and spawn-mode under `.tmp/grunt/orchestrator-logs/`
+- `effective=auto` + Implement-typed leftover pick2 chains write-plan persist then implement-plan `{n}` (skip leftover wait)
+
+### Changed
+
+- `/tmp` flatten: write under `.tmp/grunt/{serial}-{slug}-{stamp}.{ext}`; reserved dirs (`plans` `handoffs` `orchestrator-logs` …); `isUnderTmp` is root-only
+- Advise leftover: one blank line before numbered pick `1.`
+- Browser route: parent spawns grunt with abs `.rulesync/skills/browser/SKILL.md` + `.rulesync/reference/browser.md` (no Skill-invoke / `job:browse`)
+- `/solo` and `/cascade` stamp `spawn-mode-{sid}` when slash ≠ config; always unlink grunt-off
+- Package `files` include `scripts/grunt-config.mjs`; init/launch scripts (antigravity/claude/codex/gemini/grok) and host agent/skill mirrors synced
+
 ## [0.5.1] - 2026-09-01
 
 ### Added

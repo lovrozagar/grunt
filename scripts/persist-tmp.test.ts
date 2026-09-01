@@ -26,7 +26,7 @@ Please send the statement.
 `;
 
 describe("persistTmp", () => {
-  it("writes a stamped artifact under .tmp/grunt/tmp with no TMP_* or YAML", () => {
+  it("writes a stamped artifact under .tmp/grunt with no TMP_* or YAML", () => {
     const ws = tmpWs();
     const r = persistTmp({
       workspaceRoot: ws,
@@ -70,15 +70,26 @@ describe("persistTmp", () => {
 
   it("does not collide with plan or handoff serials", () => {
     const ws = tmpWs();
-    fs.mkdirSync(path.join(ws, ".tmp/plans"), { recursive: true });
+    fs.mkdirSync(path.join(ws, ".tmp/grunt/plans"), { recursive: true });
     fs.mkdirSync(path.join(ws, ".tmp/grunt/handoffs"), { recursive: true });
-    fs.writeFileSync(path.join(ws, ".tmp/plans/9-other-20260827T143000Z.md"), "x");
+    fs.writeFileSync(path.join(ws, ".tmp/grunt/plans/9-other-20260827T143000Z.md"), "x");
     fs.writeFileSync(
       path.join(ws, ".tmp/grunt/handoffs/9-other-20260827T143000Z.md"),
       "x",
     );
     const r = persistTmp({ workspaceRoot: ws, content: VALID_TMP });
     expect(r.serial).toBe(1);
+  });
+
+  it("skips directories when allocating serial", () => {
+    const ws = tmpWs();
+    const dir = path.join(ws, TMP_DIR);
+    fs.mkdirSync(path.join(dir, "9-not-a-dump"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "tmp"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "tmp/9-nested-20260827T143000Z.md"), "x");
+    const r = persistTmp({ workspaceRoot: ws, content: VALID_TMP });
+    expect(r.serial).toBe(1);
+    expect(r.path).toBe(path.join(dir, r.filename!));
   });
 
   it("increments serial and keeps the same stamp", () => {

@@ -28,8 +28,11 @@ import { persistHandoff } from "../../scripts/persist-handoff.mjs";
 import { persistTmp } from "../../scripts/persist-tmp.mjs";
 import { parseNeed } from "../../scripts/parse-need.mjs";
 import { resolveJobCwd, runJob } from "../../scripts/grunt-job.mjs";
+import { loadLeftoverGate, loadSpawnMode } from "../../scripts/grunt-config.mjs";
 
-export const ORCHESTRATOR_LOGS_DIR = ".tmp/orchestrator-logs";
+export const ORCHESTRATOR_LOGS_DIR = ".tmp/grunt/orchestrator-logs";
+/** One-release dual-read; drop next release. */
+export const LEGACY_ORCHESTRATOR_LOGS_DIR = ".tmp/orchestrator-logs";
 export const DENY_REASON =
   "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
 export const STOP_REASONS = [
@@ -59,11 +62,13 @@ const WRITE_TOOLS = new Set([
 ]);
 const BASH_TOOLS = new Set(["bash", "runterminalcommand", "runcommand"]);
 const SKILL_TOOLS = new Set(["skill"]);
-const PARENT_SKILLS = new Set([
+export const PARENT_SKILLS = new Set([
   "parent",
   "explain",
   "solo",
   "cascade",
+  "auto",
+  "ask",
   "handoff",
   "tmp",
   "pickup",
@@ -76,7 +81,11 @@ const MAX_INTERCEPT = 3;
 /** `/solo` enters single-agent mode; `/cascade` restores the orchestrator. */
 const SOLO_RE = /^\s*\/solo\s*$/;
 const CASCADE_RE = /^\s*\/cascade\s*$/;
+const AUTO_RE = /^\s*\/auto\s*$/;
+const ASK_RE = /^\s*\/ask\s*$/;
 const SOLO_STAMP = "grunt-off";
+export const AUTO_ASK_STAMP = "auto-ask";
+export const SPAWN_MODE_STAMP = "spawn-mode";
 
 
 function main() {
@@ -156,19 +165,17 @@ function preToolUse(data) {
   return 0;
 }
 
-/** Session flag, not one-turn. Fail-closed: an unreadable stamp keeps grunt on. */
+/** Session flag, not one-turn. Fail-closed: unreadable spawn-mode stamp is not solo. */
 export function isSoloMode(data) {
   try {
-    const p = soloStampPath(data);
-    return Boolean(p && fs.existsSync(p));
+    return spawnModeOf(data) === "solo";
   } catch {
     return false;
   }
 }
 
 function hasParentEscape(data) {
-  const p = stampPath(data, "parent-escape");
-  return Boolean(p && fs.existsSync(p));
+  return Boolean(resolveStamp(data, "parent-escape"));
 }
 
 function emitFat(data) {
@@ -200,15 +207,28 @@ function isUnderDir(filePath, workspaceRoot, segments) {
 }
 
 export function isUnderPlans(filePath, workspaceRoot) {
-  return isUnderDir(filePath, workspaceRoot, [".tmp", "plans"]);
+  return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "plans"]);
 }
 
 export function isUnderHandoffs(filePath, workspaceRoot) {
   return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "handoffs"]);
 }
 
+export const TMP_RESERVED_DIRS = new Set([
+  "plans",
+  "handoffs",
+  "browser",
+  "orchestrator-logs",
+]);
+
 export function isUnderTmp(filePath, workspaceRoot) {
-  return isUnderDir(filePath, workspaceRoot, [".tmp", "grunt", "tmp"]);
+  if (!filePath || !workspaceRoot) return false;
+  const abs = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(workspaceRoot, filePath);
+  const root = path.resolve(workspaceRoot, ".tmp", "grunt");
+  if (path.dirname(abs) !== root) return false;
+  return !TMP_RESERVED_DIRS.has(path.basename(abs));
 }
 
 export function isAllowedParentGruntJob(command, workspaceRoot) {
@@ -263,9 +283,18 @@ function parentWrite(data, toolInput) {
     "";
   const rewritten = rewriteGruntScratchPath(rawPath, ws);
   if (rewritten) rawPath = rewritten;
-  const handoff = isUnderHandoffs(rawPath, ws);
-  const tmp = isUnderTmp(rawPath, ws);
-  if (!handoff && !tmp && !isUnderPlans(rawPath, ws)) {
+  let persist;
+  let invalid = "invalid plan";
+  if (isUnderPlans(rawPath, ws)) {
+    persist = persistPlan;
+    invalid = "invalid plan";
+  } else if (isUnderHandoffs(rawPath, ws)) {
+    persist = persistHandoff;
+    invalid = "invalid handoff";
+  } else if (isUnderTmp(rawPath, ws)) {
+    persist = persistTmp;
+    invalid = "invalid tmp";
+  } else {
     if (hasParentEscape(data)) {
       emit({ decision: "allow" });
       return 0;
@@ -274,14 +303,11 @@ function parentWrite(data, toolInput) {
     return 0;
   }
   const content = typeof toolInput.content === "string" ? toolInput.content : "";
-  const persist = handoff ? persistHandoff : tmp ? persistTmp : persistPlan;
   const result = persist({ workspaceRoot: ws, content });
   if (!result.ok) {
     emit({
       decision: "deny",
-      reason:
-        result.error ||
-        (handoff ? "invalid handoff" : tmp ? "invalid tmp" : "invalid plan"),
+      reason: result.error || invalid,
     });
     return 0;
   }
@@ -316,10 +342,7 @@ function rewriteSpawn(toolInput, data) {
 
 function postToolUse(data) {
   if (data.subagentType || data.subagent_type) return 0;
-  const stamp = stampPath(data, "tools-used");
-  if (!stamp) return 0;
-  fs.mkdirSync(path.dirname(stamp), { recursive: true });
-  fs.writeFileSync(stamp, "1");
+  writeStamp(data, "tools-used", "1");
   return 0;
 }
 
@@ -333,29 +356,35 @@ function isParentEscapePrompt(prompt) {
 }
 
 function userPromptSubmit(data) {
-  unlinkQuiet(stampPath(data, "tools-used"));
+  unlinkStamp(data, "tools-used");
   const prompt = userPromptOf(data);
   if (!isHostStopBanner(prompt)) {
-    unlinkQuiet(stampPath(data, "stop-block"));
+    unlinkStamp(data, "stop-block");
   }
-  // Sticky: only /solo and /cascade move it. Every other prompt leaves it alone.
-  if (SOLO_RE.test(prompt)) {
-    const solo = soloStampPath(data);
-    if (solo) {
-      fs.mkdirSync(path.dirname(solo), { recursive: true });
-      fs.writeFileSync(solo, "1");
+  // Sticky: only exact /solo and /cascade move spawn-mode. Always unlink grunt-off.
+  if (SOLO_RE.test(prompt) || CASCADE_RE.test(prompt)) {
+    const token = SOLO_RE.test(prompt) ? "solo" : "cascade";
+    const cfg = loadSpawnMode(workspaceRootOf(data));
+    if (token === cfg) {
+      unlinkSpawnModeStamp(data);
+    } else {
+      writeSpawnModeStamp(data, token);
     }
-  } else if (CASCADE_RE.test(prompt)) {
-    unlinkQuiet(soloStampPath(data));
+    unlinkSoloStamp(data);
+  }
+  if (AUTO_RE.test(prompt) || ASK_RE.test(prompt)) {
+    const token = AUTO_RE.test(prompt) ? "auto" : "ask";
+    const cfg = loadLeftoverGate(workspaceRootOf(data));
+    if (token === cfg) {
+      unlinkAutoAskStamp(data);
+    } else {
+      writeAutoAskStamp(data, token);
+    }
   }
   if (isParentEscapePrompt(prompt)) {
-    const p = stampPath(data, "parent-escape");
-    if (p) {
-      fs.mkdirSync(path.dirname(p), { recursive: true });
-      fs.writeFileSync(p, "1");
-    }
+    writeStamp(data, "parent-escape", "1");
   } else {
-    unlinkQuiet(stampPath(data, "parent-escape"));
+    unlinkStamp(data, "parent-escape");
   }
   return 0;
 }
@@ -383,6 +412,38 @@ export function isWaitGruntExact(msg) {
     .filter((l) => l.trim());
   if (nonempty.length !== 1) return false;
   return nonempty[0].replace(/^[\s`*_>]+/, "") === WAIT_GRUNT;
+}
+
+function nonemptyLines(msg) {
+  return String(msg || "")
+    .split("\n")
+    .filter((l) => l.trim());
+}
+
+/** Format-only leftover triple. No leftover-number → skill map. */
+export function hasLeftoverTriple(msg) {
+  const lines = String(msg || "")
+    .split("\n")
+    .map((l) => l.replace(/^[\s`*_>]+/, "").trim());
+  const hit = (re) => lines.some((l) => re.test(l));
+  const tweak = hit(/^3\.\s+Tweak$/);
+  const impl =
+    hit(/^1\.\s+Implement with verbal plan$/) &&
+    hit(/^2\.\s+Implement with file plan$/);
+  const write =
+    hit(/^1\.\s+Write with verbal plan$/) &&
+    hit(/^2\.\s+Write with file plan$/);
+  return Boolean(tweak && (impl || write));
+}
+
+/** Ask leftover-required: any `[thinker]:`; `[orchestrator]:` iff >1 nonempty line (except exact wait-grunt); `[grunt]|[implementer]|[handoff]|[tmp]:` exempt. Auto waives in Stop. */
+export function leftoverRequiredAsk(msg) {
+  if (isWaitGruntExact(msg)) return false;
+  const first = firstNonEmptyStripped(msg);
+  if (/^\[(?:grunt|implementer|handoff|tmp)\]:/.test(first)) return false;
+  if (/^\[thinker\]:/.test(first)) return true;
+  if (/^\[orchestrator\]:/.test(first)) return nonemptyLines(msg).length > 1;
+  return false;
 }
 
 function payloadAssistantMessage(data) {
@@ -475,9 +536,8 @@ function stop(data) {
   // Before the parent-escape consume: solo must never burn the one-turn stamp.
   if (isSoloMode(data)) return 0;
 
-  const escapeStamp = stampPath(data, "parent-escape");
-  if (escapeStamp && fs.existsSync(escapeStamp)) {
-    unlinkQuiet(escapeStamp);
+  if (resolveStamp(data, "parent-escape")) {
+    unlinkStamp(data, "parent-escape");
     return 0;
   }
 
@@ -492,22 +552,22 @@ function stop(data) {
   if (waitFirst && !isWaitGruntExact(msg)) {
     // fall through to block — leftover lines not allowed on mid-turn wait
   } else if (isRecap(msg)) {
-    return 0;
+    if (
+      leftoverGateOf(data) !== "auto" &&
+      leftoverRequiredAsk(msg) &&
+      !hasLeftoverTriple(msg)
+    ) {
+      // fall through to block — leftover-required under ask
+    } else {
+      return 0;
+    }
   }
 
-  const stopStamp = stampPath(data, "stop-block");
-  let n = 0;
-  if (stopStamp && fs.existsSync(stopStamp)) {
-    n = parseInt(fs.readFileSync(stopStamp, "utf8"), 10);
-    if (!Number.isFinite(n) || n < 0) n = 0;
-  }
+  let n = readStampInt(data, "stop-block");
   if (n >= MAX_STOP) {
     return 0;
   }
-  if (stopStamp) {
-    fs.mkdirSync(path.dirname(stopStamp), { recursive: true });
-    fs.writeFileSync(stopStamp, String(n + 1));
-  }
+  writeStamp(data, "stop-block", String(n + 1));
   const reasonText = STOP_REASONS[Math.min(n, STOP_REASONS.length - 1)];
   emit({ decision: "block", reason: reasonText });
   return 0;
@@ -531,12 +591,7 @@ function interceptNeed(data, hookEventName) {
     return 0;
   }
 
-  const interceptStamp = stampPath(data, "need-intercept");
-  let n = 0;
-  if (interceptStamp && fs.existsSync(interceptStamp)) {
-    n = parseInt(fs.readFileSync(interceptStamp, "utf8"), 10);
-    if (!Number.isFinite(n) || n < 0) n = 0;
-  }
+  let n = readStampInt(data, "need-intercept");
   if (n >= MAX_INTERCEPT) {
     return 0;
   }
@@ -566,10 +621,7 @@ function interceptNeed(data, hookEventName) {
     }
     parts.push(String(result.text || "").trimEnd());
   }
-  if (interceptStamp) {
-    fs.mkdirSync(path.dirname(interceptStamp), { recursive: true });
-    fs.writeFileSync(interceptStamp, String(n + 1));
-  }
+  writeStamp(data, "need-intercept", String(n + 1));
   const reason = parts.join("\n");
   emit({
     decision: "block",
@@ -588,6 +640,42 @@ function stampPath(data, prefix) {
   return path.join(root, ORCHESTRATOR_LOGS_DIR, prefix + "-" + sid);
 }
 
+function legacyStampPath(data, prefix) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data) || "default";
+  if (!root) return null;
+  return path.join(root, LEGACY_ORCHESTRATOR_LOGS_DIR, prefix + "-" + sid);
+}
+
+function resolveStamp(data, prefix) {
+  const neu = stampPath(data, prefix);
+  if (neu && fs.existsSync(neu)) return neu;
+  const old = legacyStampPath(data, prefix);
+  if (old && fs.existsSync(old)) return old;
+  return null;
+}
+
+function writeStamp(data, prefix, body) {
+  const p = stampPath(data, prefix);
+  if (!p) return null;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, body);
+  return p;
+}
+
+function unlinkStamp(data, prefix) {
+  unlinkQuiet(stampPath(data, prefix));
+  unlinkQuiet(legacyStampPath(data, prefix));
+}
+
+function readStampInt(data, prefix) {
+  const p = resolveStamp(data, prefix);
+  if (!p) return 0;
+  const n = parseInt(fs.readFileSync(p, "utf8"), 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
+
 function sessionIdOf(data) {
   return String(
     process.env.GROK_SESSION_ID ||
@@ -602,6 +690,127 @@ function soloStampPath(data) {
   const sid = sessionIdOf(data);
   if (!root || !sid) return null;
   return path.join(root, ORCHESTRATOR_LOGS_DIR, SOLO_STAMP + "-" + sid);
+}
+
+function legacySoloStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, LEGACY_ORCHESTRATOR_LOGS_DIR, SOLO_STAMP + "-" + sid);
+}
+
+function resolveSoloStamp(data) {
+  const neu = soloStampPath(data);
+  if (neu && fs.existsSync(neu)) return neu;
+  const old = legacySoloStampPath(data);
+  if (old && fs.existsSync(old)) return old;
+  return null;
+}
+
+function unlinkSoloStamp(data) {
+  unlinkQuiet(soloStampPath(data));
+  unlinkQuiet(legacySoloStampPath(data));
+}
+
+/** Spawn-mode stamp: never share a `default` stamp across sid-less sessions. */
+export function spawnModeStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, ORCHESTRATOR_LOGS_DIR, SPAWN_MODE_STAMP + "-" + sid);
+}
+
+function legacySpawnModeStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, LEGACY_ORCHESTRATOR_LOGS_DIR, SPAWN_MODE_STAMP + "-" + sid);
+}
+
+function resolveSpawnModeStamp(data) {
+  const neu = spawnModeStampPath(data);
+  if (neu && fs.existsSync(neu)) return neu;
+  const old = legacySpawnModeStampPath(data);
+  if (old && fs.existsSync(old)) return old;
+  return null;
+}
+
+function writeSpawnModeStamp(data, body) {
+  const p = spawnModeStampPath(data);
+  if (!p) return null;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, body);
+  return p;
+}
+
+function unlinkSpawnModeStamp(data) {
+  unlinkQuiet(spawnModeStampPath(data));
+  unlinkQuiet(legacySpawnModeStampPath(data));
+}
+
+/** Valid stamp solo|cascade wins; else grunt-off presence as solo; else config. Unreadable/bad body ignored. */
+export function spawnModeOf(data) {
+  try {
+    const p = resolveSpawnModeStamp(data);
+    if (p) {
+      const body = fs.readFileSync(p, "utf8").trim();
+      if (body === "solo" || body === "cascade") return body;
+    }
+  } catch {
+    // unreadable stamp → fall through
+  }
+  if (resolveSoloStamp(data)) return "solo";
+  return loadSpawnMode(workspaceRootOf(data));
+}
+
+/** Leftover-gate stamp: never share a `default` stamp across sid-less sessions. */
+export function autoAskStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, ORCHESTRATOR_LOGS_DIR, AUTO_ASK_STAMP + "-" + sid);
+}
+
+function legacyAutoAskStampPath(data) {
+  const root = workspaceRootOf(data);
+  const sid = sessionIdOf(data);
+  if (!root || !sid) return null;
+  return path.join(root, LEGACY_ORCHESTRATOR_LOGS_DIR, AUTO_ASK_STAMP + "-" + sid);
+}
+
+function resolveAutoAskStamp(data) {
+  const neu = autoAskStampPath(data);
+  if (neu && fs.existsSync(neu)) return neu;
+  const old = legacyAutoAskStampPath(data);
+  if (old && fs.existsSync(old)) return old;
+  return null;
+}
+
+function writeAutoAskStamp(data, body) {
+  const p = autoAskStampPath(data);
+  if (!p) return null;
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, body);
+  return p;
+}
+
+function unlinkAutoAskStamp(data) {
+  unlinkQuiet(autoAskStampPath(data));
+  unlinkQuiet(legacyAutoAskStampPath(data));
+}
+
+/** Stamp body auto|ask wins; else config; else ask. Bad stamp body ignored. */
+export function leftoverGateOf(data) {
+  try {
+    const p = resolveAutoAskStamp(data);
+    if (p) {
+      const body = fs.readFileSync(p, "utf8").trim();
+      if (body === "auto" || body === "ask") return body;
+    }
+  } catch {
+    // unreadable stamp → fall through
+  }
+  return loadLeftoverGate(workspaceRootOf(data));
 }
 
 function unlinkQuiet(p) {

@@ -2,7 +2,7 @@
 name: write-plan
 description: >
   Thinker drafts a local implementer-ready checklist plan; parent Write
-  persists .tmp/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md. Use for a numbered local plan, checklist
+  persists .tmp/grunt/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md. Use for a numbered local plan, checklist
   for implementer, "write a plan", or /write-plan. Not a design doc or PR stack.
 when-to-use: >
   Use when asked to "write a plan", "make a checklist plan",
@@ -15,7 +15,7 @@ argument-hint: "<task or context>"
 
 # write-plan
 
-Parent orchestrates thinker then persists via Write under `.tmp/plans/`. Parent does not author the plan body.
+Parent orchestrates thinker then persists via Write under `.tmp/grunt/plans/`. Parent does not author the plan body.
 
 ## Invocation
 
@@ -61,7 +61,7 @@ Wait. Fail → `[thinker]: failed: {err}` stop.
 
 ## Step 2 — persist (parent Write)
 
-No grunt spawn. Parent `write`s the thinker final message under `{repo}/.tmp/plans/` (any filename in that dir). Grok `orchestrate-parent.js` runs `scripts/persist-plan.mjs`: serial/slug from `PLAN_NAME:` / heading, inject YAML, rewrite path+content. Deny invalid plans and any write outside `.tmp/plans/`.
+No grunt spawn. Parent `write`s the thinker final message under `{repo}/.tmp/grunt/plans/` (any filename in that dir). Grok `orchestrate-parent.js` runs `scripts/persist-plan.mjs`: serial/slug from `PLAN_NAME:` / heading, inject YAML, rewrite path+content. Deny invalid plans and any write outside `.tmp/grunt/plans/`.
 
 Host without that hook: name the file per `.rulesync/reference/plan-format.md` Path, or pipe the body to `node scripts/persist-plan.mjs --workspace {repo}` and use its `path`.
 
@@ -71,7 +71,7 @@ Report serial/path from the tool result (`updatedInput.file_path`). Fail/deny �
 
 ```
 [thinker]: {one-line goal}; {N} leaves
-[write-plan]: serial={int} path=.tmp/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md
+[write-plan]: serial={int} path=.tmp/grunt/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md
 next: /implement-plan {int}
 ```
 
@@ -82,10 +82,11 @@ Do not dump the plan.
 - Omit `model`. `subagent_type` ∈ {grunt, implementer, thinker} only (thinker for draft).
 - First prompt sentence: `You are {agent} subagent.`
 - Child prompt = task + abs paths + verdicts only (no pasted transcripts).
-- Parent coordinates; parent Write under `.tmp/plans/` only; thinker never writes.
+- Parent coordinates; parent Write under `.tmp/grunt/plans/` only; thinker never writes.
 - Not `/design`, not `/execute-plan`, not a design doc.
 - Tool-call first: emit `spawn_subagent` in the same turn as any spawn claim. Past tense after the tool result.
 - Slash `/write-plan` = persist-only inspect-pause; remainder ask `/implement-plan {n}`. Not leftover pick 2.
 - Implement leftover pick 2 (`Implement with file plan`) = this persist then implement-plan one-shot; skip inspect pause; no user slash.
 - Write leftover pick 2 (`Write with file plan`) = this persist inspect-pause; remainder `/implement-plan {n}`; no implementer this turn.
+- effective=auto + Implement-typed: this persist then implement-plan `{n}` (same chain as Implement leftover pick 2); skip leftover wait. Write-typed under auto still this persist inspect-pause leftover wait; never spawn implementer.
 - Always-do leftover match; leftover `2` ≠ Skill-name invoke of this skill. Parent still no Write — this skill sequencing.

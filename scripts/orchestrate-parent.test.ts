@@ -5,10 +5,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AUTO_ASK_STAMP,
   DENY_REASON,
+  LEGACY_ORCHESTRATOR_LOGS_DIR,
   ORCHESTRATOR_LOGS_DIR,
+  PARENT_SKILLS,
+  SPAWN_MODE_STAMP,
   STOP_REASONS,
+  TMP_RESERVED_DIRS,
+  autoAskStampPath,
   isAllowedParentGruntJob,
+  isAllowedParentSkill,
+  isSoloMode,
+  isUnderTmp,
+  leftoverGateOf,
+  leftoverRequiredAsk,
+  spawnModeOf,
+  spawnModeStampPath,
 } from "../.grok/hooks/orchestrate-parent.js";
 import { VALID_HANDOFF } from "./persist-handoff.test.ts";
 import { VALID_TMP } from "./persist-tmp.test.ts";
@@ -152,7 +165,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[tmp]: serial=1 path=.tmp/grunt/tmp/1-x-20260827T143000Z.md\n",
+          "[tmp]: serial=1 path=.tmp/grunt/1-x-20260827T143000Z.md\n",
         workspaceRoot: ws,
         sessionId: "s-tmp",
       },
@@ -179,8 +192,13 @@ describe("orchestrate-parent Stop", () => {
     expect(result.stdout).toBe("");
   });
 
-  it("allows [orchestrator]: recap", () => {
+  it("allows [orchestrator]: recap without leftover when leftover-gate=auto", () => {
     const ws = workspace();
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(ws, ORCHESTRATOR_LOGS_DIR, "auto-ask-s-orch-recap"),
+      "auto",
+    );
     const result = runHook(
       {
         hookEventName: "Stop",
@@ -201,13 +219,21 @@ describe("orchestrate-parent Stop", () => {
 
   it("allows role tags [grunt]: [implementer]: [thinker]: [handoff]:", () => {
     const ws = workspace();
+    const msgs: Record<string, string> = {
+      grunt: "[grunt]: ok",
+      implementer: "[implementer]: ok",
+      thinker:
+        "[thinker]: ok\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
+      handoff: "[handoff]: ok",
+      tmp: "[tmp]: ok",
+    };
     for (const tag of ["grunt", "implementer", "thinker", "handoff", "tmp"] as const) {
       const sid = `s-role-${tag}`;
       const result = runHook(
         {
           hookEventName: "Stop",
           reason: "end_turn",
-          lastAssistantMessage: `[${tag}]: ok`,
+          lastAssistantMessage: msgs[tag],
           workspaceRoot: ws,
           sessionId: sid,
         },
@@ -288,6 +314,11 @@ describe("orchestrate-parent Stop", () => {
 
   it("allows last_assistant_message snake_case recap", () => {
     const ws = workspace();
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(ws, ORCHESTRATOR_LOGS_DIR, "auto-ask-s-snake-msg"),
+      "auto",
+    );
     const result = runHook(
       {
         hookEventName: "Stop",
@@ -308,6 +339,11 @@ describe("orchestrate-parent Stop", () => {
 
   it("transcript-only [orchestrator]: allows when payload is empty", () => {
     const ws = workspace();
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(ws, ORCHESTRATOR_LOGS_DIR, "auto-ask-s-tr-only"),
+      "auto",
+    );
     const tp = path.join(ws, "transcript.jsonl");
     fs.writeFileSync(
       tp,
@@ -430,7 +466,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: advise stop\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
+          "[orchestrator]: advise stop\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-advise-leftover",
       },
@@ -451,7 +487,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: advise-only how. Remainder persist note.\n1. Write with verbal plan\n2. Write with file plan\n3. Tweak",
+          "[orchestrator]: advise-only how. Remainder persist note.\n\n1. Write with verbal plan\n2. Write with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-write-leftover",
       },
@@ -472,7 +508,7 @@ describe("orchestrate-parent Stop", () => {
         hookEventName: "Stop",
         reason: "end_turn",
         lastAssistantMessage:
-          "[orchestrator]: wait grunt\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
+          "[orchestrator]: wait grunt\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
         workspaceRoot: ws,
         sessionId: "s-wait-leftover",
       },
@@ -524,6 +560,18 @@ describe("orchestrate-parent Stop", () => {
     );
     expect(output).toMatch(implementTriple);
     expect(output).toMatch(writeTriple);
+    expect(output).toMatch(
+      /\[orchestrator\]: wrote \/abs\/a\n\n1\. Implement with verbal plan\n2\. Implement with file plan\n3\. Tweak/,
+    );
+    expect(output).toMatch(
+      /\[orchestrator\]: advise-only how\. Remainder persist note\.\n\n1\. Write with verbal plan\n2\. Write with file plan\n3\. Tweak/,
+    );
+    expect(output).toMatch(
+      /one empty blank line immediately before leftover 1\./,
+    );
+    expect(cascade).toMatch(
+      /one empty blank line immediately before leftover 1\./,
+    );
     expect(output).toMatch(/echoes printed leftover/i);
     expect(output).toMatch(/no implementer this remainder/);
     expect(output).toMatch(/Leftover ⊆ remainder kinds|leftover ⊆ remainder/i);
@@ -746,6 +794,11 @@ describe("orchestrate-parent Stop", () => {
 
   it("parent-stop recap allows; missing recap blocks; stop_hook_active fail-open", () => {
     const ws = workspace();
+    fs.mkdirSync(path.join(ws, ORCHESTRATOR_LOGS_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(ws, ORCHESTRATOR_LOGS_DIR, "auto-ask-s-stop-ok"),
+      "auto",
+    );
     const ok = runHook(
       {
         hookEventName: "Stop",
@@ -821,7 +874,8 @@ describe("orchestrate-parent Stop", () => {
       "utf8",
     );
     expect(ssot).toMatch(/^name: tmp$/m);
-    expect(ssot).toMatch(/\.tmp\/grunt\/tmp\//);
+    expect(ssot).toMatch(/\.tmp\/grunt\/\{serial\}-\{slug\}-/);
+    expect(ssot).not.toMatch(/\.tmp\/grunt\/tmp\//);
     expect(ssot).toMatch(/\[tmp\]: serial=/);
     expect(ssot).not.toMatch(/\/pickup/);
     for (const rel of [
@@ -1007,7 +1061,7 @@ describe("orchestrate-parent regression: defects 1-5", () => {
     const variants = [
       "`[implementer]: shipped",
       "*[grunt]: done",
-      "> [thinker]: planned",
+      "> [thinker]: planned\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak",
       "\n\n[handoff]: serial=1 path=.tmp/grunt/handoffs/1-x-20260827T143000Z.md",
     ];
     variants.forEach((msg, i) => {
@@ -1086,9 +1140,9 @@ describe("orchestrate-parent regression: defects 1-5", () => {
 });
 
 describe("orchestrate-parent parent write", () => {
-  it("allows .tmp/plans/ write and rewrites serial path", () => {
+  it("allows .tmp/grunt/plans/ write and rewrites serial path", () => {
     const ws = workspace();
-    const dest = path.join(ws, ".tmp/plans/draft.md");
+    const dest = path.join(ws, ".tmp/grunt/plans/draft.md");
     const result = runHook(
       {
         hookEventName: "PreToolUse",
@@ -1102,7 +1156,7 @@ describe("orchestrate-parent parent write", () => {
     const out = JSON.parse(result.stdout);
     expect(out.hookSpecificOutput.updatedInput.file_path).toMatch(
       new RegExp(
-        `${path.join(ws, ".tmp/plans/1-add-tmp-ignore-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
+        `${path.join(ws, ".tmp/grunt/plans/1-add-tmp-ignore-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
       ),
     );
     expect(out.hookSpecificOutput.updatedInput.content).toMatch(/^---\nserial: 1\n/);
@@ -1110,6 +1164,28 @@ describe("orchestrate-parent parent write", () => {
       /^created: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/m,
     );
     expect(out.decision).toBeUndefined();
+  });
+
+  it("denies parent Write under old .tmp/plans/", () => {
+    const ws = workspace();
+    const result = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "write",
+        toolInput: {
+          file_path: path.join(ws, ".tmp/plans/draft.md"),
+          content: VALID_THINKER,
+        },
+        workspaceRoot: ws,
+      },
+      { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+    );
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      decision: "deny",
+      reason: DENY_REASON,
+    });
+    expect(fs.existsSync(path.join(ws, ".tmp/plans"))).toBe(false);
+    expect(fs.existsSync(path.join(ws, ".tmp/grunt/plans"))).toBe(false);
   });
 
   it("denies src/ write", () => {
@@ -1158,14 +1234,14 @@ describe("orchestrate-parent parent write", () => {
     expect(out.decision).toBeUndefined();
   });
 
-  it("allows .tmp/grunt/tmp/ write and rewrites serial path without YAML", () => {
+  it("allows .tmp/grunt/ root write and rewrites serial path without YAML", () => {
     const ws = workspace();
     const result = runHook(
       {
         hookEventName: "PreToolUse",
         toolName: "write",
         toolInput: {
-          file_path: path.join(ws, ".tmp/grunt/tmp/draft.md"),
+          file_path: path.join(ws, ".tmp/grunt/draft.md"),
           content: VALID_TMP,
         },
         workspaceRoot: ws,
@@ -1177,7 +1253,7 @@ describe("orchestrate-parent parent write", () => {
     expect(out.hookSpecificOutput.updatedInput.file_path).toMatch(
       new RegExp(
         `${path
-          .join(ws, ".tmp/grunt/tmp/1-bank-email-draft-")
+          .join(ws, ".tmp/grunt/1-bank-email-draft-")
           .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d{8}T\\d{6}Z\\.md$`,
       ),
     );
@@ -1187,14 +1263,14 @@ describe("orchestrate-parent parent write", () => {
     expect(out.decision).toBeUndefined();
   });
 
-  it("denies invalid tmp under .tmp/grunt/tmp/", () => {
+  it("denies invalid tmp under .tmp/grunt/ root", () => {
     const ws = workspace();
     const result = runHook(
       {
         hookEventName: "PreToolUse",
         toolName: "write",
         toolInput: {
-          file_path: path.join(ws, ".tmp/grunt/tmp/bad.md"),
+          file_path: path.join(ws, ".tmp/grunt/bad.md"),
           content: "no name line\n",
         },
         workspaceRoot: ws,
@@ -1205,6 +1281,32 @@ describe("orchestrate-parent parent write", () => {
       decision: "deny",
       reason: "missing TMP_NAME",
     });
+  });
+
+  it("denies nested tmp/browser/orchestrator-logs writes", () => {
+    const ws = workspace();
+    for (const rel of [
+      ".tmp/grunt/tmp/draft.md",
+      ".tmp/grunt/browser/draft.md",
+      ".tmp/grunt/orchestrator-logs/draft.md",
+    ]) {
+      const result = runHook(
+        {
+          hookEventName: "PreToolUse",
+          toolName: "write",
+          toolInput: {
+            file_path: path.join(ws, rel),
+            content: VALID_TMP,
+          },
+          workspaceRoot: ws,
+        },
+        { GROK_HOOK_EVENT: "pre_tool_use", GROK_WORKSPACE_ROOT: ws },
+      );
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        decision: "deny",
+        reason: DENY_REASON,
+      });
+    }
   });
 
   it("denies invalid handoff under .tmp/grunt/handoffs/", () => {
@@ -1231,7 +1333,7 @@ describe("orchestrate-parent parent write", () => {
         hookEventName: "PreToolUse",
         toolName: "write",
         toolInput: {
-          file_path: path.join(ws, ".tmp/grunt/notes.md"),
+          file_path: path.join(ws, ".tmp/grunt/cov/notes.md"),
           content: VALID_HANDOFF,
         },
         workspaceRoot: ws,
@@ -1305,14 +1407,14 @@ describe("orchestrate-parent parent write", () => {
     });
   });
 
-  it("denies invalid plan under .tmp/plans/", () => {
+  it("denies invalid plan under .tmp/grunt/plans/", () => {
     const ws = workspace();
     const result = runHook(
       {
         hookEventName: "PreToolUse",
         toolName: "write",
         toolInput: {
-          file_path: path.join(ws, ".tmp/plans/bad.md"),
+          file_path: path.join(ws, ".tmp/grunt/plans/bad.md"),
           content: "PLAN_NAME: bad\n\n# bad\n\nnope\n",
         },
         workspaceRoot: ws,
@@ -1842,6 +1944,8 @@ describe("orchestrate-parent spawn Agent + default sid", () => {
 describe("orchestrate-parent /solo", () => {
   const soloStamp = (ws: string, sid: string) =>
     path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+  const spawnStamp = (ws: string, sid: string) =>
+    path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
 
   const submit = (ws: string, sid: string, prompt: string) =>
     runHook(
@@ -1895,11 +1999,50 @@ describe("orchestrate-parent /solo", () => {
       },
     );
 
-  it("/solo sets the stamp and /cascade clears it", () => {
+  it("honors a legacy solo stamp and /cascade unlinks both", () => {
+    const ws = workspace();
+    const sid = "legacy-solo";
+    const old = path.join(ws, LEGACY_ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, "1");
+    expect(stopTurn(ws, sid).stdout).toBe("");
+    const bash = preTool(ws, sid, "bash", { command: "ls" });
+    expect(bash.status).toBe(0);
+    expect(
+      bash.stdout === "" || JSON.parse(bash.stdout).decision !== "deny",
+    ).toBe(true);
+    submit(ws, sid, "/cascade");
+    expect(fs.existsSync(old)).toBe(false);
+    expect(fs.existsSync(soloStamp(ws, sid))).toBe(false);
+    expect(fs.existsSync(spawnStamp(ws, sid))).toBe(false);
+    expect(JSON.parse(stopTurn(ws, sid).stdout).decision).toBe("block");
+  });
+
+  it("/solo writes spawn-mode not grunt-off", () => {
+    const ws = workspace();
+    const sid = "new-solo";
+    submit(ws, sid, "/solo");
+    expect(fs.existsSync(spawnStamp(ws, sid))).toBe(true);
+    expect(fs.readFileSync(spawnStamp(ws, sid), "utf8")).toBe("solo");
+    expect(fs.existsSync(soloStamp(ws, sid))).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(ws, LEGACY_ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`),
+      ),
+    ).toBe(false);
+    expect(
+      fs.existsSync(
+        path.join(ws, LEGACY_ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`),
+      ),
+    ).toBe(false);
+  });
+
+  it("/solo sets spawn-mode and /cascade clears it", () => {
     const ws = workspace();
     submit(ws, "s", "/solo");
-    expect(fs.existsSync(soloStamp(ws, "s"))).toBe(true);
+    expect(fs.existsSync(spawnStamp(ws, "s"))).toBe(true);
     submit(ws, "s", "/cascade");
+    expect(fs.existsSync(spawnStamp(ws, "s"))).toBe(false);
     expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
   });
 
@@ -1908,6 +2051,7 @@ describe("orchestrate-parent /solo", () => {
     const result = submit(ws, "s", "/cascade");
     expect(result.status).toBe(0);
     expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
+    expect(fs.existsSync(spawnStamp(ws, "s"))).toBe(false);
   });
 
   it("stamp is sticky across ordinary prompts", () => {
@@ -1915,7 +2059,8 @@ describe("orchestrate-parent /solo", () => {
     submit(ws, "s", "/solo");
     for (const p of ["what is 2+2", "/parent ship it", "/explain", "keep going"]) {
       submit(ws, "s", p);
-      expect(fs.existsSync(soloStamp(ws, "s"))).toBe(true);
+      expect(fs.existsSync(spawnStamp(ws, "s"))).toBe(true);
+      expect(fs.readFileSync(spawnStamp(ws, "s"), "utf8")).toBe("solo");
     }
   });
 
@@ -1993,6 +2138,12 @@ describe("orchestrate-parent /solo", () => {
     expect(fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, "grunt-off-"))).toBe(
       false,
     );
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-default`)),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-`)),
+    ).toBe(false);
   });
 
   it("only exact /solo and /cascade toggle the mode", () => {
@@ -2000,6 +2151,7 @@ describe("orchestrate-parent /solo", () => {
     for (const p of ["/solomon", "solo", "/solo now", "// solo", "/cascaded"]) {
       submit(ws, "s", p);
       expect(fs.existsSync(soloStamp(ws, "s"))).toBe(false);
+      expect(fs.existsSync(spawnStamp(ws, "s"))).toBe(false);
     }
   });
 
@@ -2020,6 +2172,7 @@ describe("orchestrate-parent /solo", () => {
       path.join(root, ".rulesync/skills/solo/SKILL.md"),
       "utf8",
     );
+    expect(ssot).toMatch(/spawn-mode-\{sid\}/);
     expect(ssot).toMatch(/grunt-off-\{sid\}/);
     expect(ssot).toMatch(/\/cascade/);
     expect(ssot).toMatch(/Agents\/Antigravity/);
@@ -2041,6 +2194,7 @@ describe("orchestrate-parent /solo", () => {
     );
     expect(ssot).toMatch(/Exit solo \/ restore cascade/);
     expect(ssot).toMatch(/Not a sticky second mode/);
+    expect(ssot).toMatch(/spawn-mode-\{sid\}/);
     expect(ssot).toMatch(/grunt-off-\{sid\}/);
     expect(ssot).toMatch(/\/solo/);
     expect(ssot).toMatch(/`need:`\/`verdict:`/);
@@ -2270,6 +2424,41 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     }
   });
 
+  it("always-do prefers browse rail over websearch; parent does not allowlist browser", () => {
+    for (const rel of [
+      ".rulesync/subagents/orchestrator.md",
+      ".rulesync/rules/overview.md",
+      ".rulesync/rules/CLAUDE.md",
+    ]) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(text).toMatch(/snippet \/ cite \/ "what is X"/);
+      expect(text).toMatch(/URL-in-a-cite ≠ browse/);
+      expect(text).toMatch(
+        /URL \/ browse \/ click \/ fill \/ snap \/ live DOM/,
+      );
+      expect(text).toMatch(/\.rulesync\/skills\/browser\/SKILL\.md/);
+      expect(text).toMatch(/\.rulesync\/reference\/browser\.md/);
+      expect(text).toMatch(/never websearch that page/);
+      expect(text).toMatch(
+        /Browse tags match → prompt must include abs `\.rulesync\/skills\/browser\/SKILL\.md`/,
+      );
+    }
+    expect(PARENT_SKILLS.has("browser")).toBe(false);
+    expect(isAllowedParentSkill({ skill: "browser" })).toBe(false);
+    const grunt = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/grunt.md"),
+      "utf8",
+    );
+    expect(grunt).toMatch(/Live page ≠ `job:web`/);
+    expect(grunt).toMatch(/No `job:browse`/);
+    const thinker = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/thinker.md"),
+      "utf8",
+    );
+    expect(thinker).toMatch(/Browse-vs-web advise only/);
+    expect(thinker).toMatch(/do not browse/);
+  });
+
   it("Claude settings PreToolUse parent-deny + one SubagentStop", () => {
     const settings = JSON.parse(
       fs.readFileSync(path.join(root, ".claude/settings.json"), "utf8"),
@@ -2446,8 +2635,573 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     );
     const pre = grokJson.hooks?.PreToolUse ?? [];
     expect(pre.some((h: { matcher?: string }) => h.matcher)).toBe(false);
-    expect(fs.existsSync(path.join(root, ".tmp/orchestrator-logs/grunt-off-fixture"))).toBe(
-      false,
+    expect(
+      fs.existsSync(path.join(root, ORCHESTRATOR_LOGS_DIR, "grunt-off-fixture")),
+    ).toBe(false);
+  });
+});
+
+const IMPL_LEFTOVER =
+  "[orchestrator]: advise stop\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak";
+
+function writeLeftoverConfig(ws: string, body: string) {
+  const dir = path.join(ws, ".rulesync");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "grunt.config.jsonc"), body);
+}
+
+function submitPrompt(ws: string, sid: string, prompt: string) {
+  return runHook(
+    {
+      hookEventName: "UserPromptSubmit",
+      prompt,
+      workspaceRoot: ws,
+      sessionId: sid,
+    },
+    {
+      GROK_HOOK_EVENT: "user_prompt_submit",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: sid,
+    },
+  );
+}
+
+function stopMsg(ws: string, sid: string, msg: string) {
+  return runHook(
+    {
+      hookEventName: "Stop",
+      reason: "end_turn",
+      lastAssistantMessage: msg,
+      workspaceRoot: ws,
+      sessionId: sid,
+    },
+    {
+      GROK_HOOK_EVENT: "stop",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: sid,
+    },
+  );
+}
+
+function withHookEnv<T>(ws: string, sid: string, fn: () => T): T {
+  const prevW = process.env.GROK_WORKSPACE_ROOT;
+  const prevS = process.env.GROK_SESSION_ID;
+  process.env.GROK_WORKSPACE_ROOT = ws;
+  if (sid) process.env.GROK_SESSION_ID = sid;
+  else delete process.env.GROK_SESSION_ID;
+  try {
+    return fn();
+  } finally {
+    if (prevW === undefined) delete process.env.GROK_WORKSPACE_ROOT;
+    else process.env.GROK_WORKSPACE_ROOT = prevW;
+    if (prevS === undefined) delete process.env.GROK_SESSION_ID;
+    else process.env.GROK_SESSION_ID = prevS;
+  }
+}
+
+function preSkill(ws: string, sid: string, skill: string) {
+  return runHook(
+    {
+      hookEventName: "PreToolUse",
+      toolName: "Skill",
+      toolInput: { skill },
+      workspaceRoot: ws,
+      sessionId: sid,
+    },
+    {
+      GROK_HOOK_EVENT: "pre_tool_use",
+      GROK_WORKSPACE_ROOT: ws,
+      GROK_SESSION_ID: sid,
+    },
+  );
+}
+
+describe("auto-ask stamp", () => {
+  it("honors a legacy auto-ask stamp and slash==config unlinks both", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    const sid = "legacy-auto";
+    const old = path.join(
+      ws,
+      LEGACY_ORCHESTRATOR_LOGS_DIR,
+      `${AUTO_ASK_STAMP}-${sid}`,
+    );
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, "auto");
+    expect(
+      withHookEnv(ws, sid, () => leftoverGateOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("auto");
+    submitPrompt(ws, sid, "/ask");
+    expect(fs.existsSync(old)).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`)),
+    ).toBe(false);
+  });
+
+  it("/auto writes the new stamp path only", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    const sid = "new-auto";
+    submitPrompt(ws, sid, "/auto");
+    const neu = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`);
+    expect(fs.existsSync(neu)).toBe(true);
+    expect(fs.readFileSync(neu, "utf8")).toBe("auto");
+    expect(
+      fs.existsSync(
+        path.join(ws, LEGACY_ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`),
+      ),
+    ).toBe(false);
+  });
+
+  it("stamp overrides config; slash==config unlinks; sid-less path null and no file", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    const sid = "st1";
+    submitPrompt(ws, sid, "/auto");
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`);
+    expect(fs.existsSync(stamp)).toBe(true);
+    expect(fs.readFileSync(stamp, "utf8")).toBe("auto");
+    expect(
+      withHookEnv(ws, sid, () => leftoverGateOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("auto");
+
+    submitPrompt(ws, sid, "/ask");
+    expect(fs.existsSync(stamp)).toBe(false);
+    expect(
+      withHookEnv(ws, sid, () => leftoverGateOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("ask");
+
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"auto"}');
+    submitPrompt(ws, sid, "/ask");
+    expect(fs.existsSync(stamp)).toBe(true);
+    expect(fs.readFileSync(stamp, "utf8")).toBe("ask");
+    submitPrompt(ws, sid, "/auto");
+    expect(fs.existsSync(stamp)).toBe(false);
+
+    const nullPath = withHookEnv(ws, "", () =>
+      autoAskStampPath({ workspaceRoot: ws, sessionId: "" }),
+    );
+    expect(nullPath).toBe(null);
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/auto",
+        workspaceRoot: ws,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "",
+      },
+    );
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-default`)),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-`)),
+    ).toBe(false);
+  });
+
+  it("bad stamp body ignored; exact /auto foo no-op", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    const sid = "bad";
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`);
+    fs.mkdirSync(path.dirname(stamp), { recursive: true });
+    fs.writeFileSync(stamp, "nope");
+    expect(
+      withHookEnv(ws, sid, () => leftoverGateOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("ask");
+    submitPrompt(ws, sid, "/auto foo");
+    expect(fs.readFileSync(stamp, "utf8")).toBe("nope");
+  });
+});
+
+describe("spawn-mode stamp", () => {
+  it("honors a legacy spawn-mode stamp and slash==config unlinks both", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "legacy-spawn";
+    const old = path.join(
+      ws,
+      LEGACY_ORCHESTRATOR_LOGS_DIR,
+      `${SPAWN_MODE_STAMP}-${sid}`,
+    );
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, "solo");
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("solo");
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(old)).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`)),
+    ).toBe(false);
+  });
+
+  it("/solo writes the new stamp path only", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "new-spawn";
+    submitPrompt(ws, sid, "/solo");
+    const neu = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    expect(fs.existsSync(neu)).toBe(true);
+    expect(fs.readFileSync(neu, "utf8")).toBe("solo");
+    expect(
+      fs.existsSync(
+        path.join(ws, LEGACY_ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`),
+      ),
+    ).toBe(false);
+  });
+
+  it("stamp overrides config; slash==config unlinks; sid-less path null and no file", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "st-spawn";
+    submitPrompt(ws, sid, "/solo");
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    expect(fs.existsSync(stamp)).toBe(true);
+    expect(fs.readFileSync(stamp, "utf8")).toBe("solo");
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("solo");
+
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(stamp)).toBe(false);
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("cascade");
+
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}');
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(stamp)).toBe(true);
+    expect(fs.readFileSync(stamp, "utf8")).toBe("cascade");
+    submitPrompt(ws, sid, "/solo");
+    expect(fs.existsSync(stamp)).toBe(false);
+
+    const nullPath = withHookEnv(ws, "", () =>
+      spawnModeStampPath({ workspaceRoot: ws, sessionId: "" }),
+    );
+    expect(nullPath).toBe(null);
+    runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "/solo",
+        workspaceRoot: ws,
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "",
+      },
+    );
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-default`)),
+    ).toBe(false);
+    expect(
+      fs.existsSync(path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-`)),
+    ).toBe(false);
+  });
+
+  it("bad stamp body ignored; exact /solo foo no-op", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "bad-spawn";
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    fs.mkdirSync(path.dirname(stamp), { recursive: true });
+    fs.writeFileSync(stamp, "nope");
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("cascade");
+    submitPrompt(ws, sid, "/solo foo");
+    expect(fs.readFileSync(stamp, "utf8")).toBe("nope");
+  });
+
+  it("unreadable spawn-mode stamp falls through; dual-read grunt-off else config", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "unread-spawn";
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    fs.mkdirSync(path.dirname(stamp), { recursive: true });
+    fs.writeFileSync(stamp, "solo");
+    fs.chmodSync(stamp, 0);
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("cascade");
+    const off = path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+    fs.writeFileSync(off, "1");
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("solo");
+    fs.chmodSync(stamp, 0o644);
+  });
+
+  it("grunt-off without spawn-mode is solo; valid cascade stamp beats leftover grunt-off", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "dual";
+    const off = path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+    fs.mkdirSync(path.dirname(off), { recursive: true });
+    fs.writeFileSync(off, "1");
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(true);
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    fs.writeFileSync(stamp, "cascade");
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(false);
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("cascade");
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(stamp)).toBe(false);
+    expect(fs.existsSync(off)).toBe(false);
+  });
+
+  it("config spawnMode solo with no stamp is solo; /solo unlinks spawn-mode and grunt-off; /cascade writes cascade", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}');
+    const sid = "cfg-solo";
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(true);
+    const stamp = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    const off = path.join(ws, ORCHESTRATOR_LOGS_DIR, `grunt-off-${sid}`);
+    fs.mkdirSync(path.dirname(stamp), { recursive: true });
+    fs.writeFileSync(stamp, "cascade");
+    fs.writeFileSync(off, "1");
+    submitPrompt(ws, sid, "/solo");
+    expect(fs.existsSync(stamp)).toBe(false);
+    expect(fs.existsSync(off)).toBe(false);
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(true);
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(stamp)).toBe(true);
+    expect(fs.readFileSync(stamp, "utf8")).toBe("cascade");
+    expect(fs.existsSync(off)).toBe(false);
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(false);
+  });
+
+  it("leftover vs spawn stamps independent", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    const sid = "indep";
+    submitPrompt(ws, sid, "/solo");
+    submitPrompt(ws, sid, "/auto");
+    const spawn = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${SPAWN_MODE_STAMP}-${sid}`);
+    const auto = path.join(ws, ORCHESTRATOR_LOGS_DIR, `${AUTO_ASK_STAMP}-${sid}`);
+    expect(fs.readFileSync(spawn, "utf8")).toBe("solo");
+    expect(fs.readFileSync(auto, "utf8")).toBe("auto");
+    expect(
+      withHookEnv(ws, sid, () => leftoverGateOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("auto");
+    expect(
+      withHookEnv(ws, sid, () => spawnModeOf({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe("solo");
+    submitPrompt(ws, sid, "/cascade");
+    expect(fs.existsSync(spawn)).toBe(false);
+    expect(fs.existsSync(auto)).toBe(true);
+  });
+
+  it("config solo skips parent-deny and Stop-before-parent-escape; defaultGrunt skipped", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}');
+    const sid = "cfg-gates";
+    const stop = stopMsg(ws, sid, implMsg);
+    expect(stop.status).toBe(0);
+    expect(stop.stdout).toBe("");
+    const escape = path.join(ws, ORCHESTRATOR_LOGS_DIR, `parent-escape-${sid}`);
+    fs.mkdirSync(path.dirname(escape), { recursive: true });
+    fs.writeFileSync(escape, "1");
+    expect(stopMsg(ws, sid, implMsg).stdout).toBe("");
+    expect(fs.existsSync(escape)).toBe(true);
+    const bash = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "bash",
+        toolInput: { command: "ls" },
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(JSON.parse(bash.stdout).decision).toBe("allow");
+    const spawn = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "task",
+        toolInput: { prompt: "do the thing" },
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    const spawnOut = JSON.parse(spawn.stdout);
+    expect(spawnOut.decision).toBe("allow");
+    expect(spawnOut.hookSpecificOutput).toBeUndefined();
+  });
+});
+
+const THINK_LEFTOVER =
+  "[thinker]: advise stop\n\n1. Implement with verbal plan\n2. Implement with file plan\n3. Tweak";
+
+describe("Stop leftover-required", () => {
+  it("heuristic: any thinker; orchestrator multi-line; wait-grunt+child tags+single-line orch exempt", () => {
+    expect(leftoverRequiredAsk("[orchestrator]: child done")).toBe(false);
+    expect(leftoverRequiredAsk("[orchestrator]: child done\nmore")).toBe(true);
+    expect(leftoverRequiredAsk("[thinker]: advise\nmore")).toBe(true);
+    expect(leftoverRequiredAsk("[thinker]: ok")).toBe(true);
+    expect(leftoverRequiredAsk("[orchestrator]: wait grunt")).toBe(false);
+    expect(leftoverRequiredAsk("[grunt]: facts")).toBe(false);
+    expect(leftoverRequiredAsk("[implementer]: shipped\nmore")).toBe(false);
+    expect(leftoverRequiredAsk("[handoff]: serial=1 path=x\nnext: y")).toBe(false);
+    expect(leftoverRequiredAsk("[tmp]: serial=1 path=x")).toBe(false);
+    expect(leftoverRequiredAsk("")).toBe(false);
+    expect(leftoverRequiredAsk("[agent]: x")).toBe(false);
+  });
+
+  it("ask allows single-line [orchestrator]: fact recap; blocks multi-line without leftover; auto allows", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    const fact = stopMsg(ws, "ask1", "[orchestrator]: child done");
+    expect(fact.status).toBe(0);
+    expect(fact.stdout).toBe("");
+    const blocked = stopMsg(ws, "ask1", "[orchestrator]: child done\nmore");
+    expect(blocked.status).toBe(0);
+    expect(JSON.parse(blocked.stdout).decision).toBe("block");
+
+    submitPrompt(ws, "auto1", "/auto");
+    const allowed = stopMsg(ws, "auto1", "[orchestrator]: child done\nmore");
+    expect(allowed.status).toBe(0);
+    expect(allowed.stdout).toBe("");
+  });
+
+  it("ask allows leftover triple; wait-grunt and child tags unchanged", () => {
+    const ws = workspace();
+    const withTriple = stopMsg(ws, "t1", IMPL_LEFTOVER);
+    expect(withTriple.stdout).toBe("");
+    const wait = stopMsg(ws, "t2", "[orchestrator]: wait grunt");
+    expect(wait.stdout).toBe("");
+    const grunt = stopMsg(ws, "t3", "[grunt]: facts");
+    expect(grunt.stdout).toBe("");
+    const impl = stopMsg(ws, "t4", "[implementer]: shipped\nmore");
+    expect(impl.stdout).toBe("");
+    const handoff = stopMsg(ws, "t5", "[handoff]: serial=1 path=x\nnext: y");
+    expect(handoff.stdout).toBe("");
+    const tmp = stopMsg(ws, "t6", "[tmp]: serial=1 path=x");
+    expect(tmp.stdout).toBe("");
+    const thinkerOne = stopMsg(ws, "t7", "[thinker]: ok");
+    expect(JSON.parse(thinkerOne.stdout).decision).toBe("block");
+    const thinkerMulti = stopMsg(ws, "t8", "[thinker]: advise\nmore");
+    expect(JSON.parse(thinkerMulti.stdout).decision).toBe("block");
+    const thinkerTriple = stopMsg(ws, "t9", THINK_LEFTOVER);
+    expect(thinkerTriple.stdout).toBe("");
+  });
+
+  it("auto waives leftover format check including thinker and multi-line orch", () => {
+    const ws = workspace();
+    writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask"}');
+    submitPrompt(ws, "auto2", "/auto");
+    const thinkerOne = stopMsg(ws, "auto2", "[thinker]: ok");
+    expect(thinkerOne.status).toBe(0);
+    expect(thinkerOne.stdout).toBe("");
+    const thinkerMulti = stopMsg(ws, "auto2", "[thinker]: advise\nmore");
+    expect(thinkerMulti.status).toBe(0);
+    expect(thinkerMulti.stdout).toBe("");
+    const orch = stopMsg(ws, "auto2", "[orchestrator]: child done\nmore");
+    expect(orch.stdout).toBe("");
+  });
+});
+
+describe("PARENT_SKILLS + Write-typed auto", () => {
+  it("PARENT_SKILLS and INDEX reserved include auto and ask", () => {
+    expect(PARENT_SKILLS.has("auto")).toBe(true);
+    expect(PARENT_SKILLS.has("ask")).toBe(true);
+    expect(PARENT_SKILLS.has("browser")).toBe(false);
+    expect(isAllowedParentSkill({ skill: "auto" })).toBe(true);
+    expect(isAllowedParentSkill({ skill: "ask" })).toBe(true);
+    expect(isAllowedParentSkill({ skill: "browser" })).toBe(false);
+    const index = fs.readFileSync(
+      path.join(root, ".rulesync/reference/INDEX.md"),
+      "utf8",
+    );
+    expect(index).toMatch(/`ask`/);
+    expect(index).toMatch(/`auto`/);
+    const orch = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/orchestrator.md"),
+      "utf8",
+    );
+    expect(orch).toMatch(/\| `\/auto` \| session leftover-gate auto;/);
+    expect(orch).toMatch(/\| `\/ask` \| session leftover-gate ask;/);
+    expect(orch).toMatch(/not spawn-escape/);
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    );
+    expect(pkg.files.includes("scripts/grunt-config.mjs")).toBe(true);
+    const initSrc = fs.readFileSync(path.join(root, "cli/init.mjs"), "utf8");
+    expect(initSrc).toMatch(/"grunt-config\.mjs"/);
+    const ws = workspace();
+    const autoSkill = preSkill(ws, "sk", "auto");
+    expect(JSON.parse(autoSkill.stdout).decision).toBe("allow");
+    const askSkill = preSkill(ws, "sk", "ask");
+    expect(JSON.parse(askSkill.stdout).decision).toBe("allow");
+  });
+
+  it("Write-typed under auto does not spawn implementer; hook has no auto-spawn", () => {
+    const writePlan = fs.readFileSync(
+      path.join(root, ".rulesync/skills/write-plan/SKILL.md"),
+      "utf8",
+    );
+    const implPlan = fs.readFileSync(
+      path.join(root, ".rulesync/skills/implement-plan/SKILL.md"),
+      "utf8",
+    );
+    expect(writePlan).toMatch(
+      /Write-typed under auto still this persist inspect-pause leftover wait/,
+    );
+    expect(writePlan).toMatch(/never spawn implementer/);
+    expect(implPlan).toMatch(/Write-typed under auto: no implementer this turn/);
+    const hook = fs.readFileSync(orchParent, "utf8");
+    expect(hook).not.toMatch(/leftoverGateOf\([^)]*\)[^{]*spawn/s);
+    expect(hook).toMatch(/leftoverGateOf\(data\) !== "auto"/);
+    expect(hook).not.toMatch(
+      /if \(leftoverGateOf\(data\) === "auto"\)[\s\S]{0,200}SPAWN/,
     );
   });
 });
+
+describe("isUnderTmp", () => {
+  it("matches root files and rejects reserved and nested paths", () => {
+    const ws = "/ws";
+    expect(TMP_RESERVED_DIRS).toEqual(
+      new Set(["plans", "handoffs", "browser", "orchestrator-logs"]),
+    );
+    expect(isUnderTmp(".tmp/grunt/notes.md", ws)).toBe(true);
+    expect(isUnderTmp(path.join(ws, ".tmp/grunt/1-x-20260827T143000Z.md"), ws)).toBe(
+      true,
+    );
+    expect(isUnderTmp(".tmp/grunt/tmp/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/browser/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/orchestrator-logs/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/cov/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/plans/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/handoffs/x.md", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/plans", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/handoffs", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/browser", ws)).toBe(false);
+    expect(isUnderTmp(".tmp/grunt/orchestrator-logs", ws)).toBe(false);
+  });
+});
+

@@ -80,6 +80,6 @@ Do not dump the handoff body.
 
 - No spawn. One write. `/handoff` is not a mode.
 - Never parent Read/Bash. Write handoffs dir only.
-- Handoff ≠ plan: no Steps/Verify phases, no `.tmp/plans/` write.
+- Handoff ≠ plan: no Steps/Verify phases, no `.tmp/grunt/plans/` write.
 - Never rewrite or renumber an existing handoff; new session = new serial.
 - Protocol: `.rulesync/reference/cascade.md`. Do not paste it here.

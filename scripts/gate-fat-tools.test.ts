@@ -551,7 +551,7 @@ describe("rewriteGruntScratchPath", () => {
 
 describe("processFatTools implementer write-allowlist", () => {
   function writePlan(ws: string, status: string, listed: string) {
-    const plans = path.join(ws, ".tmp", "plans");
+    const plans = path.join(ws, ".tmp", "grunt", "plans");
     fs.mkdirSync(plans, { recursive: true });
     const planPath = path.join(plans, "1-listed-20260827T173530Z.md");
     fs.writeFileSync(

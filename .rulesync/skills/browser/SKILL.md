@@ -1,8 +1,8 @@
 ---
 name: browser
 description: >
-  Session browser rail. /browser or browse a URL. Call
-  node scripts/browser.mjs nav|snap|click|fill|shot|pdf|stop.
+  Live URL/interact → this; not websearch. /browser or browse a URL.
+  Call node scripts/browser.mjs nav|snap|click|fill|shot|pdf|stop.
   Lightpanda default; snap is the default read. Windows → Chromium.
   Never MCP. Never env knobs. Never raw Playwright.
 ---

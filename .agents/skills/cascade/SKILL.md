@@ -19,8 +19,10 @@ This session: cascade restored. You are the parent orchestrator.
 
 Fat-tool caps stay on — token guards, not cascade.
 
-Claude/Codex/Grok: `/cascade` via submit hook unlinks `.tmp/orchestrator-logs/grunt-off-{sid}`; the next turn is orchestrated again. Already orchestrated: no-op. Agents/Antigravity: instruction-only (this skill body); cannot unlink stamp via `/cascade`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
+Effective spawn: stamp body `solo`|`cascade` > one-release `grunt-off-{sid}` presence as solo > `.rulesync/grunt.config.jsonc` `spawnMode` > `cascade`. Fail-closed `cascade`. Unreadable/bad stamp body ignored (dual-read grunt-off else config). Never fail-closed solo.
+
+Claude/Codex/Grok: `/cascade` via submit hook. If slash token equals committed config `spawnMode`, unlink `.tmp/grunt/orchestrator-logs/spawn-mode-{sid}`; else write stamp body `cascade`. Always unlink `grunt-off-{sid}` (new+legacy). Requires real sid (never `default`). Already matching config with no leftover grunt-off: no-op. Agents/Antigravity: instruction-only (this skill body); cannot unlink stamp via `/cascade`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
 
 `/explain` is voice-only not spawn-escape. After unlink first token = spawn.
 
-After `/solo`, or when spawn/recap/need|verdict must resume.
+After `/solo`, or when spawn/recap/need|verdict must resume. Leftover-gate `/auto`/`/ask` is not spawn-escape.

@@ -26,13 +26,14 @@ Cheap outline. Not a file dump.
 ## Grok hand files
 - `.grok/hooks/orchestrate-parent.js` + `.grok/hooks/orchestrate-parent.json` — parent spawn/fat/stop/plan-write / SubagentStop intercept
 - `.grok/hooks/rtk.json` — RTK
-- `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` — generated from `.rulesync/skills/`; do not hand-edit
+- `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,auto,ask,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` — generated from `.rulesync/skills/`; do not hand-edit
 - `.grok/parent.md` — 1-line pointer to orchestrator agent; not SessionStart
 - `.grok/roles/*.toml`
 - `.grok/global-settings.toml` — merged into `~/.grok/config.toml` by `scripts/sync-global-settings.mjs` (not auto-loaded; project config cannot set `[features]`)
 - `.rulesync/global-settings/` — host manifest and reserved noop payloads
 - `.rulesync/mcp-policy.jsonc` — MCP deny-default SSOT (`default: deny`, `allow: []`)
-- `.rulesync/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,browser,write-plan,implement-plan}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode)
+- `.rulesync/grunt.config.jsonc` — leftover-gate + spawnMode SSOT (`version` `1`, `leftoverGate` `ask`|`auto` committed default `ask`, `spawnMode` `solo`|`cascade` committed default `cascade` never `solo`). Effective spawn: stamp `spawn-mode-{sid}` > one-release `grunt-off` > config > `cascade`. Fail-closed cascade. Keys independent.
+- `.rulesync/skills/{parent,explain,handoff,pickup,solo,cascade,auto,ask,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,browser,write-plan,implement-plan}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode). `/auto` `/ask` = session leftover-gate (not spawn-escape)
 
 ## Scripts
 - `scripts/pipeline.mjs` — inner generate/check/watch chain (rulesync + emit-* + hooks-union / check-globals). Called by `guarded-roots`; not a public npm script (`rulesync:generate` `rulesync:check` `rulesync:watch` only)
@@ -43,6 +44,7 @@ Cheap outline. Not a file dump.
 - `scripts/grunt-job.mjs` — flags `--job` `--query` `--path` `--glob` (repeatable) `--cwd`; regex in `--query` OK; never `cd &&`; unknown flags / exec shell-meta → FALLBACK
 - `scripts/parse-need.mjs`
 - `scripts/persist-handoff.mjs` — `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `HANDOFF_NAME:` → slug; H2 `Goal|State|Context|Next|Watch-outs`; `status` `open|resumed|done`
+- `scripts/persist-tmp.mjs` — `.tmp/grunt/{serial}-{slug}-{stamp}.{ext}` root files; `TMP_NAME:` / `TMP_EXT:`; own serial; skip reserved dirs
 - `scripts/persist-plan.mjs`
 - `scripts/sync-global-settings.mjs` — dry-run-by-default merge of `.grok/global-settings.toml` into `$HOME/.grok/config.toml`; manifest in `.rulesync/global-settings/`; `skipKeyPattern` skips MCP; never copies project MCP into `$HOME/.grok`
 - `scripts/purge-global-mcps.mjs` — dry-run-by-default purge of stubborn global MCP sources (`$HOME/.grok/config.toml` plugins + `disabled_mcp_servers`, `$HOME/.cursor/mcp.json` `MCP_DOCKER`); `--apply` writes; never project MCP
@@ -50,22 +52,25 @@ Cheap outline. Not a file dump.
 - `scripts/emit-gemini.mjs` — `GEMINI.md` (`@AGENTS.md`) + `.gemini/agents/{id}/agent.md` from `.rulesync/subagents` (not `rulesync -t geminicli`); no prune; does not touch settings
 - `scripts/emit-agent-shell-tools.mjs` — after rulesync subagents: rewrite `.claude/agents/grunt.md` body `Bash`; grok/codex/gemini/generic keep `run_terminal_command`
 - `scripts/browser.mjs` — session browser rail `nav|snap|click|fill|shot|pdf|stop`; Lightpanda default; Chromium on verb/OS/probe/paint-host/one-escalate; `.tmp/grunt/browser/`
+- `scripts/grunt-config.mjs` — `loadLeftoverGate(workspaceRoot)` fail-closed `ask`; `loadSpawnMode(workspaceRoot)` fail-closed `cascade`; keys independent
 
 ## Tmp
-- `.tmp/plans/` — persist-plan / parent / implementer; format SSOT = `.rulesync/reference/plan-format.md`
-- `.tmp/orchestrator-logs/` — parent stamps (shared; not grunt scratch)
-- `.tmp/grunt/` — grunt scratch/tmp only
+- `.tmp/grunt/plans/` — persist-plan / parent / implementer; format SSOT = `.rulesync/reference/plan-format.md`
+- `.tmp/grunt/orchestrator-logs/` — parent stamps
+- `.tmp/grunt/` — grunt scratch + `/tmp` dumps `{serial}-{slug}-{stamp}.{ext}` at root (not nested `tmp/`)
 - `.tmp/grunt/browser/` — browser session/profile/shot/pdf (not MCP)
 - `.tmp/grunt/handoffs/` — persist-handoff / `/handoff`; own serial counter (not plan serials)
 
-## Stamps (`.tmp/orchestrator-logs/`)
-- `tools-used` / `stop-block` / `need-intercept` / `parent-escape` — Stop does not waive impl finals for `tools-used`; `/parent` writes `parent-escape-{sid}` once
-- `grunt-off-{sid}` — `/solo` session mode. Sticky: only `/solo` / `/cascade` move it. Requires a real sid (never the `default` fallback). Read fail-closed — an unreadable stamp keeps grunt on
+## Stamps (`.tmp/grunt/orchestrator-logs/`)
+- `tools-used` / `stop-block` / `need-intercept` / `parent-escape` / `auto-ask` / `spawn-mode` — Stop does not waive impl finals for `tools-used`; `/parent` writes `parent-escape-{sid}` once
+- `spawn-mode-{sid}` — spawn session stamp. Body `solo`|`cascade`. Slash==config unlinks. Sid-less: no stamp. Unreadable/bad body ignored (dual-read `grunt-off` else config → cascade). `/solo` `/cascade` always unlink `grunt-off`
+- `grunt-off-{sid}` — one-release dual-read as solo when spawn-mode stamp missing or body not exact `solo`|`cascade`. `/solo` `/cascade` always unlink. Requires a real sid (never the `default` fallback). Do not write new `grunt-off`
+- `auto-ask-{sid}` — leftover-gate session stamp. Body `auto`|`ask`. Slash==config unlinks. Sid-less: no stamp. Unreadable/bad body ignored (fall through config → ask). Not spawn-escape.
 
 ## Generated (do not hand-edit; committed, not gitignored)
 - `AGENTS.md`, `CLAUDE.md`
 - `.rulesync/reference/INDEX.md`, `skills-map.md`, `refs-map.md` (`emit-maps.mjs`)
-- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` (from `.rulesync/skills/`)
+- `.claude/skills/*`, `.agents/skills/*`, `.grok/skills/{parent,explain,handoff,pickup,solo,cascade,auto,ask,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,write-plan,implement-plan}/` (from `.rulesync/skills/`)
 - `.grok/agents/*`
 - `.claude/agents/*`
 - `.codex/agents/*`

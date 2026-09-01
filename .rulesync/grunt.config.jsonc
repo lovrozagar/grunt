@@ -1,0 +1,7 @@
+// leftoverGate: "ask" | "auto"
+// spawnMode: "cascade" | "solo"
+{
+  "version": 1,
+  "leftoverGate": "ask",
+  "spawnMode": "cascade"
+}

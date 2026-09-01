@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Allocate/slugify/write a one-off convo artifact under .tmp/grunt/tmp/. */
+/** Allocate/slugify/write a one-off convo artifact under .tmp/grunt/. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -11,7 +11,7 @@ import {
   utcDateTime,
 } from "./persist-plan.mjs";
 
-export const TMP_DIR = ".tmp/grunt/tmp";
+export const TMP_DIR = ".tmp/grunt";
 /** `{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.{ext}`; stamp required. */
 export const FILENAME_RE =
   /^[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*-\d{8}T\d{6}Z\.[a-z0-9]+$/;
@@ -50,8 +50,9 @@ export function normalizeTmpExt(raw) {
 function nextTmpSerial(dir) {
   let next = 1;
   if (!fs.existsSync(dir)) return next;
-  for (const b of fs.readdirSync(dir)) {
-    const m = b.match(/^([0-9]+)-/);
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!ent.isFile()) continue;
+    const m = ent.name.match(/^([0-9]+)-/);
     if (!m) continue;
     const n = parseInt(m[1], 10);
     if (Number.isFinite(n) && n >= next) next = n + 1;

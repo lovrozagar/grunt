@@ -1,7 +1,7 @@
 ---
 name: implement-plan
 description: >
-  Implementer executes a local .tmp/plans checklist: continue, resume, or
+  Implementer executes a local .tmp/grunt/plans checklist: continue, resume, or
   pick among plans. Empty /implement-plan resumes a unique in-progress or
   starts a unique ready plan; else lists and needs serial. Marks [x], skips
   completed leaves. Not /implement review-loop, not /execute-plan PR DAG,
@@ -19,7 +19,7 @@ argument-hint: "[serial|path]"
 
 # implement-plan
 
-Parent: spawn grunt to list/validate `.tmp/plans/` when the target is unknown or empty-arg; then spawn implementer with abs plan path + `{repo}/.rulesync/reference/plan-format.md` + first open leaf. Recap from implementer output only. No parent Read/Grep/Bash. Agent-agnostic (grunt then implementer). Not `/pickup` (handoffs only). Not `/run-plan`. Not `/execute-plan` (PR DAG).
+Parent: spawn grunt to list/validate `.tmp/grunt/plans/` when the target is unknown or empty-arg; then spawn implementer with abs plan path + `{repo}/.rulesync/reference/plan-format.md` + first open leaf. Recap from implementer output only. No parent Read/Grep/Bash. Agent-agnostic (grunt then implementer). Not `/pickup` (handoffs only). Not `/run-plan`. Not `/execute-plan` (PR DAG).
 
 Format SSOT: `.rulesync/reference/plan-format.md`.
 
@@ -32,7 +32,7 @@ Todos: `resolve` → `implement` → `verify`. One serial per run. Partial progr
 
 ## Resolve
 
-Arg = `$ARGUMENTS` stripped. Listing/validate: spawn grunt (`job:search|exec`) on `.tmp/plans/`. Do not parent Read/Grep/Bash.
+Arg = `$ARGUMENTS` stripped. Listing/validate: spawn grunt (`job:search|exec`) on `.tmp/grunt/plans/`. Do not parent Read/Grep/Bash.
 
 Eligible auto = valid plan-format checkbox grammar (`N [ ]` / `N.M [ ]`; not `- [ ]`; not `1. [ ]`). Invalid grammar: exclude from auto. Drop `done` (all `[x]` or FM `status: done`) from auto. Never silent latest. Never auto-pick among many.
 
@@ -44,7 +44,7 @@ Eligible auto = valid plan-format checkbox grammar (`N [ ]` / `N.M [ ]`; not `- 
 
 ### Empty arg (`/implement-plan`)
 
-Grunt lists/validates `.tmp/plans/*.md`. Then:
+Grunt lists/validates `.tmp/grunt/plans/*.md`. Then:
 
 | condition | action |
 |---|---|
@@ -64,9 +64,9 @@ That file only; skip `[x]`; remaining leaves. Write-plan remainder stays `/imple
 | input | action |
 |---|---|
 | int (`1`, `0001`) | files whose leading number == that int |
-| `{serial}-slug` or `*.md` or path | that file if under `.tmp/plans/` |
+| `{serial}-slug` or `*.md` or path | that file if under `.tmp/grunt/plans/` |
 | slug only (`add-auth`) | unique match `*-{slug}-*.md` or `*-{slug}.md` |
-| `.tmp/plans` missing / no files | `no plans. /write-plan first` stop |
+| `.tmp/grunt/plans` missing / no files | `no plans. /write-plan first` stop |
 | 0 matches | `no plan serial={n}. have: {list}` stop |
 | >1 matches | `ambiguous: {paths}` stop |
 | all boxes already `[x]` / `status: done` | `[implementer]: already done path=...` **no implementer spawn** |
@@ -103,7 +103,7 @@ Wait. Spawn fail → `[implementer]: failed: {err}` stop.
 Recap from implementer output only. No parent Read/Grep/Bash.
 
 ```
-[implementer]: serial={int} path=.tmp/plans/{file} status={status} done={x}/{total}
+[implementer]: serial={int} path=.tmp/grunt/plans/{file} status={status} done={x}/{total}
 files: {abs paths}
 {if leftover:}
 leftover:
@@ -114,8 +114,9 @@ leftover:
 ## Rules
 
 - Skip `[x]`; only flip boxes; no renumber/rewrite leaf text.
-- No review-fix loop. Not bundled `/implement`. Implement leftover pick 1 (`Implement with verbal plan`) ≠ this skill (no `.tmp/plans`; no write-plan; no implement-plan). Bare `implement`/`implementer` → pick1 iff Implement-typed, not this skill; else recap “no implementer this remainder”.
+- No review-fix loop. Not bundled `/implement`. Implement leftover pick 1 (`Implement with verbal plan`) ≠ this skill (no `.tmp/grunt/plans`; no write-plan; no implement-plan). Bare `implement`/`implementer` → pick1 iff Implement-typed, not this skill; else recap “no implementer this remainder”.
 - Slash `/implement-plan {n}` = disk/file run. Empty `/implement-plan` = unique-resume / unique-start / else list. Implement leftover pick 2 may invoke this sequencing without user slash (after write-plan persist; `plan=/abs/...` only). Write leftover pick 2 does not spawn implementer this turn. Always-do leftover match; leftover `2` ≠ Skill-name. Verbal leftover ≠ implement-plan.
+- effective=auto + Implement-typed may chain this sequencing without user slash after write-plan persist (`plan=/abs/...`). Write-typed under auto: no implementer this turn; leftover wait.
 - No auto `/write-plan` chain. Escalation → tell user to `/write-plan` a follow-up.
 - Omit `model`. `subagent_type: implementer` only for this skill.
 - First prompt sentence: `You are implementer subagent.`

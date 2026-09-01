@@ -439,7 +439,7 @@ function resolveWriteAbs(filePath, workspaceRoot) {
 
 function isUnderPlansDir(abs, workspaceRoot) {
   if (!abs || !workspaceRoot) return false;
-  const dir = path.resolve(workspaceRoot, ".tmp", "plans");
+  const dir = path.resolve(workspaceRoot, ".tmp", "grunt", "plans");
   if (abs === dir) return true;
   const rel = path.relative(dir, abs);
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
@@ -487,7 +487,7 @@ function inProgressStatus(text) {
 }
 
 function loadInProgressPlans(workspaceRoot) {
-  const dir = path.resolve(workspaceRoot, ".tmp", "plans");
+  const dir = path.resolve(workspaceRoot, ".tmp", "grunt", "plans");
   let names;
   try {
     names = fs.readdirSync(dir);

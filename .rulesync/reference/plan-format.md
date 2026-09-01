@@ -4,7 +4,7 @@ Local implementer checklist. Not a design doc, PR stack, or DAG.
 
 ## Path
 
-`.tmp/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md`
+`.tmp/grunt/plans/{serial}-{slug}-{YYYYMMDDTHHMMSSZ}.md`
 
 - **serial:** unpadded decimal int only (`1`, `12`, `10000`). **Never** `0001`, never quoted `"0001"` / `"1"`. Serial ≥ 1.
 - **filename:** unpadded serial, slug, UTC datetime stamp (`6-sync-global-settings-20260826T143000Z.md`, not `0001-slug.md`). Stamp is `created` with `-` and `:` dropped (keep `T` and `Z`).
@@ -26,9 +26,9 @@ Local implementer checklist. Not a design doc, PR stack, or DAG.
 ## Allocate next serial (grunt, bash)
 
 ```bash
-mkdir -p .tmp/plans
+mkdir -p .tmp/grunt/plans
 next=1
-for f in .tmp/plans/*; do
+for f in .tmp/grunt/plans/*; do
   [ -f "$f" ] || continue
   b=$(basename "$f")
   case "$b" in
@@ -109,7 +109,7 @@ Thinker cites **absolute paths**. Leaves must be implementable without re-planni
 
 ## Worked example
 
-File: `.tmp/plans/1-add-tmp-ignore-20260826T143000Z.md`
+File: `.tmp/grunt/plans/1-add-tmp-ignore-20260826T143000Z.md`
 
 ```markdown
 ---
@@ -123,16 +123,16 @@ source: "gitignore .tmp so local plans stay untracked"
 # add-tmp-ignore
 
 ## Goal
-Repo `.gitignore` ignores `.tmp/` so files under `.tmp/plans/` stay untracked. Existing ignore entries stay.
+Repo `.gitignore` ignores `.tmp/` so files under `.tmp/grunt/plans/` stay untracked. Existing ignore entries stay.
 
 ## Context
 - `/home/ecomet/Development/example-app/.gitignore` may be missing or lack `.tmp/`
-- Plans live at `/home/ecomet/Development/example-app/.tmp/plans/`
+- Plans live at `/home/ecomet/Development/example-app/.tmp/grunt/plans/`
 - No python helpers; bash only
 
 ## Constraints
 - Do not clobber other `.gitignore` lines
-- Do not create sample plans under `.tmp/plans` for git
+- Do not create sample plans under `.tmp/grunt/plans` for git
 - Do not edit `AGENTS.md`
 
 ## Watch-outs
@@ -145,15 +145,15 @@ Repo `.gitignore` ignores `.tmp/` so files under `.tmp/plans/` stay untracked. E
 1.2 [ ] create `/home/ecomet/Development/example-app/.gitignore` when missing, body `.tmp/`
 1.3 [ ] append `.tmp/` to `/home/ecomet/Development/example-app/.gitignore` if the line is absent
 2 [ ] plans dir
-2.1 [ ] mkdir -p `/home/ecomet/Development/example-app/.tmp/plans`
+2.1 [ ] mkdir -p `/home/ecomet/Development/example-app/.tmp/grunt/plans`
 2.2 [ ] confirm the dir exists; do not add a sample `*.md` under it
 3 [ ] sanity
 3.1 [ ] grep `^\.tmp/` in `/home/ecomet/Development/example-app/.gitignore`
 3.2 [ ] confirm no extra hunks in that file besides the ignore line
-3.3 [ ] `git check-ignore -v /home/ecomet/Development/example-app/.tmp/plans` from repo root
+3.3 [ ] `git check-ignore -v /home/ecomet/Development/example-app/.tmp/grunt/plans` from repo root
 
 ## Verify
 4 [ ] Verify
-4.1 [ ] `git check-ignore -v .tmp/plans` reports ignored
+4.1 [ ] `git check-ignore -v .tmp/grunt/plans` reports ignored
 4.2 [ ] `git status --short -- .gitignore` shows only the ignore edit
 ```

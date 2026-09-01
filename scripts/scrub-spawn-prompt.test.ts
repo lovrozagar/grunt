@@ -317,7 +317,7 @@ describe("capSpawnPrompt transcript + truncate", () => {
       workspaceRoot: ws,
     });
     expect(denied).toMatchObject({ decision: "deny" });
-    expect(denied.reason).toContain(`${ws}/.tmp/plans/`);
+    expect(denied.reason).toContain(`${ws}/.tmp/grunt/plans/`);
     expect(denied.reason).toMatch(/re-spawn/i);
     expect(denied.reason).toMatch(/abs path/i);
     expect(JSON.stringify(denied)).not.toContain(TRUNCATE_SUFFIX);
@@ -371,7 +371,7 @@ describe("orchestrate-parent spawn cap deny", () => {
     expect(result.status).toBe(0);
     const json = JSON.parse(result.stdout);
     expect(json.decision).toBe("deny");
-    expect(json.reason).toContain(`${root}/.tmp/plans/`);
+    expect(json.reason).toContain(`${root}/.tmp/grunt/plans/`);
     expect(json.reason).toMatch(/re-spawn/i);
     expect(result.stdout).not.toContain(TRUNCATE_SUFFIX);
     expect(json.hookSpecificOutput?.updatedInput).toBeUndefined();
