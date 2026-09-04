@@ -17,7 +17,7 @@ Override: same name → one SSOT path (`.rulesync/skills/<name>/`). Re-init forc
 | ask | local | Session leftover-gate. /ask sets leftover-gate ask for this session — leftover triple wait on advise-class recaps. Not… |  |  |  |
 | auto | local | Session leftover-gate. /auto sets leftover-gate auto for this session — Implement-typed pick2 chains write-plan persist… |  |  |  |
 | browser | local | Live URL/interact → this; not websearch. /browser or browse a URL. Call node scripts/browser.mjs nav\|snap\|click\|fill\|sh… |  |  |  |
-| cascade | local | Session mode. /cascade exits solo and restores the grunt cascade for this session — spawn, orchestrator, recap, need\|ve… |  |  |  |
+| cascade | local | Session mode. /cascade exits solo and restores the grunt cascade for this session — spawn, orchestrator, recap, need JS… |  |  |  |
 | commit | local | Inspect the diff and commit with a Conventional Commits subject line. Use for /commit, "commit this", "commit these cha… |  |  |  |
 | commit-and-push | local | Alias of commit-push (1-release stub). Use for /commit-and-push, "commit and push", "commit this and push". Must push.… |  |  |  |
 | commit-push | local | Commit with a Conventional Commits subject, then push. Use for /commit-push, "commit and push", "commit this and push".… |  |  |  |
@@ -28,7 +28,7 @@ Override: same name → one SSOT path (`.rulesync/skills/<name>/`). Re-init forc
 | implement-plan | local | Implementer executes a local .tmp/grunt/plans checklist: continue, resume, or pick among plans. Empty /implement-plan r… |  |  |  |
 | parent | local | One-turn parent-orchestrator escape. Use for /parent. Not a session mode. |  |  |  |
 | pickup | local | Pick up/continue a session handoff under .tmp/grunt/handoffs/. Use for /pickup, pick up, continue handoff, serial, drag… |  |  |  |
-| solo | local | Session mode. /solo disables the grunt cascade for this session — one normal agent, no spawn, no orchestrator. /cascade… |  |  |  |
+| solo | local | Session mode. /solo suspends the grunt cascade for this session — one normal agent; spawn-if-asked. /cascade restores i… |  |  |  |
 | tmp | local | One-off convo artifact dump under .tmp/grunt/. Use for /tmp, dump a draft, save a note/email/script from this session.… |  |  |  |
 | write-plan | local | Thinker drafts a local implementer-ready checklist plan; parent Write persists .tmp/grunt/plans/{serial}-{slug}-{YYYYMM… |  |  |  |
 
@@ -41,6 +41,6 @@ Override: same name → one SSOT path (`.rulesync/skills/<name>/`). Re-init forc
 | .rulesync/reference/hooks.md | Hooks | hooks | SessionStart: keep empty (token baseline). Do not inject context. Do not register a SessionStart hook on `../../.grok/h… |
 | .rulesync/reference/law.md | Law |  | Protocol stays cascade/overview; domain fills this. |
 | .rulesync/reference/map.md | Map | map | Cheap outline. Not a file dump. |
-| .rulesync/reference/output.md | Output | output | en-US unless asked. every output maximal superterse. Fragments OK. Sacrifice grammar; keep meaning. Parent and child. E… |
+| .rulesync/reference/output.md | Output | output | en-US unless asked. Terse complete sentences. First line is the glance; rest still readable. Lowest cognitive load for… |
 | .rulesync/reference/plan-format.md | Plan format (SSOT) |  | Local implementer checklist. Not a design doc, PR stack, or DAG. |
 | .rulesync/reference/rtk.md | RTK | rtk | Shell stdout compression. PreToolUse: Bash → `rtk <cmd>`. Not Read/Grep/Glob/prompts/images. |

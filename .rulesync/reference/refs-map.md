@@ -9,6 +9,6 @@
 | .rulesync/reference/hooks.md | Hooks | hooks | SessionStart: keep empty (token baseline). Do not inject context. Do not register a SessionStart hook on `../../.grok/h… |
 | .rulesync/reference/law.md | Law |  | Protocol stays cascade/overview; domain fills this. |
 | .rulesync/reference/map.md | Map | map | Cheap outline. Not a file dump. |
-| .rulesync/reference/output.md | Output | output | en-US unless asked. every output maximal superterse. Fragments OK. Sacrifice grammar; keep meaning. Parent and child. E… |
+| .rulesync/reference/output.md | Output | output | en-US unless asked. Terse complete sentences. First line is the glance; rest still readable. Lowest cognitive load for… |
 | .rulesync/reference/plan-format.md | Plan format (SSOT) |  | Local implementer checklist. Not a design doc, PR stack, or DAG. |
 | .rulesync/reference/rtk.md | RTK | rtk | Shell stdout compression. PreToolUse: Bash → `rtk <cmd>`. Not Read/Grep/Glob/prompts/images. |

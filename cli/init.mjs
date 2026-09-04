@@ -77,17 +77,24 @@ export function samePath(a, b) {
   }
 }
 
+const GITIGNORE_ENTRIES = [
+  { re: /^\.tmp\/?$/, line: ".tmp/" },
+  {
+    re: /^\.rulesync\/grunt\.config\.local\.jsonc$/,
+    line: ".rulesync/grunt.config.local.jsonc",
+  },
+]
+
 export function mergeGitignore(dest) {
   const gi = path.join(dest, ".gitignore")
-  if (!fs.existsSync(gi)) {
-    fs.writeFileSync(gi, ".tmp/\n")
-    return
-  }
-  const text = fs.readFileSync(gi, "utf8")
-  const has = text.split(/\r?\n/).some((line) => /^\.tmp\/?$/.test(line))
-  if (has) return
-  const prefix = text.endsWith("\n") || text.length === 0 ? "" : "\n"
-  fs.appendFileSync(gi, `${prefix}.tmp/\n`)
+  const text = fs.existsSync(gi) ? fs.readFileSync(gi, "utf8") : ""
+  const present = text.split(/\r?\n/)
+  const missing = GITIGNORE_ENTRIES.filter(
+    ({ re }) => !present.some((line) => re.test(line)),
+  ).map(({ line }) => line)
+  if (missing.length === 0) return
+  const prefix = text.length === 0 || text.endsWith("\n") ? "" : "\n"
+  fs.writeFileSync(gi, `${text}${prefix}${missing.join("\n")}\n`)
 }
 
 function destHasGruntSentinel(dest) {

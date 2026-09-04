@@ -38,7 +38,7 @@ Read {abs}/.rulesync/reference/plan-format.md. Produce a plan that matches it.
 Task:
 {full $ARGUMENTS + relevant conversation context}
 
-Cite absolute paths. Use only listed abs paths plus prefetch `verdict:` blobs. Do not explore the repo. Narrowest change that solves the task.
+Cite absolute paths. Use only listed abs paths plus prefetch facts. Do not explore the repo. Narrowest change that solves the task.
 
 Output rules:
 - Line 1: PLAN_NAME: <3-6 word name>
@@ -74,7 +74,7 @@ Do not dump the plan.
 
 - Omit `model`. `subagent_type` ∈ {grunt, implementer, thinker} only (thinker for draft).
 - First prompt sentence: `You are {agent} subagent.`
-- Child prompt = task + abs paths + verdicts only (no pasted transcripts).
+- Child prompt = task + abs paths + facts (no pasted transcripts).
 - Parent coordinates; parent Write under `.tmp/grunt/plans/` only; thinker never writes.
 - Not `/design`, not `/execute-plan`, not a design doc.
 - Tool-call first: emit `spawn_subagent` in the same turn as any spawn claim. Past tense after the tool result.

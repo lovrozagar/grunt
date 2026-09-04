@@ -179,25 +179,40 @@ describe("samePath", () => {
   });
 });
 
+const GI_BOTH = ".tmp/\n.rulesync/grunt.config.local.jsonc\n";
+
 describe("mergeGitignore", () => {
-  it("creates .tmp/ when missing", () => {
+  it("creates .tmp/ and local overlay ignore when missing", () => {
     const dest = tmp("gi-miss-");
     mergeGitignore(dest);
-    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(".tmp/\n");
+    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(GI_BOTH);
   });
 
-  it("noop when .tmp/ present", () => {
+  it("appends local overlay when .tmp/ present", () => {
     const dest = tmp("gi-slash-");
     fs.writeFileSync(path.join(dest, ".gitignore"), "foo\n.tmp/\nbar\n");
     mergeGitignore(dest);
-    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe("foo\n.tmp/\nbar\n");
+    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(
+      "foo\n.tmp/\nbar\n.rulesync/grunt.config.local.jsonc\n",
+    );
   });
 
-  it("noop when .tmp present", () => {
+  it("appends local overlay when .tmp present", () => {
     const dest = tmp("gi-bare-");
     fs.writeFileSync(path.join(dest, ".gitignore"), ".tmp\n");
     mergeGitignore(dest);
-    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(".tmp\n");
+    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(
+      ".tmp\n.rulesync/grunt.config.local.jsonc\n",
+    );
+  });
+
+  it("noop when both entries present", () => {
+    const dest = tmp("gi-both-");
+    fs.writeFileSync(path.join(dest, ".gitignore"), `foo\n${GI_BOTH}bar\n`);
+    mergeGitignore(dest);
+    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(
+      `foo\n${GI_BOTH}bar\n`,
+    );
   });
 
   it("appends after trailing newline", () => {
@@ -205,7 +220,7 @@ describe("mergeGitignore", () => {
     fs.writeFileSync(path.join(dest, ".gitignore"), "node_modules/\n");
     mergeGitignore(dest);
     expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(
-      "node_modules/\n.tmp/\n",
+      `node_modules/\n${GI_BOTH}`,
     );
   });
 
@@ -214,7 +229,7 @@ describe("mergeGitignore", () => {
     fs.writeFileSync(path.join(dest, ".gitignore"), "node_modules/");
     mergeGitignore(dest);
     expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(
-      "node_modules/\n.tmp/\n",
+      `node_modules/\n${GI_BOTH}`,
     );
   });
 
@@ -222,7 +237,7 @@ describe("mergeGitignore", () => {
     const dest = tmp("gi-empty-");
     fs.writeFileSync(path.join(dest, ".gitignore"), "");
     mergeGitignore(dest);
-    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(".tmp/\n");
+    expect(fs.readFileSync(path.join(dest, ".gitignore"), "utf8")).toBe(GI_BOTH);
   });
 });
 
@@ -1528,7 +1543,9 @@ describe("init", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, "package.json"), "utf8"));
     expect(pkg.name).toBe("fixture-pkg");
     expect(fs.existsSync(path.join(pkgRoot, ".tmp"))).toBe(true);
-    expect(fs.readFileSync(path.join(pkgRoot, ".gitignore"), "utf8")).toBe(".tmp/\n");
+    expect(fs.readFileSync(path.join(pkgRoot, ".gitignore"), "utf8")).toBe(
+      ".tmp/\n.rulesync/grunt.config.local.jsonc\n",
+    );
     expect(fs.readFileSync(path.join(pkgRoot, "scripts", "grunt-job.mjs"), "utf8")).toBe(
       "grunt-job.mjs",
     );
@@ -1623,7 +1640,9 @@ describe("init", () => {
     const pkgRoot = stubPkgRoot();
     init(pkgRoot, { pkgRoot });
     expect(fs.existsSync(path.join(pkgRoot, "AGENTS.md"))).toBe(true);
-    expect(fs.readFileSync(path.join(pkgRoot, ".gitignore"), "utf8")).toBe(".tmp/\n");
+    expect(fs.readFileSync(path.join(pkgRoot, ".gitignore"), "utf8")).toBe(
+      ".tmp/\n.rulesync/grunt.config.local.jsonc\n",
+    );
   });
 
   it("omitted pkgRoot uses built-in PKG_ROOT; exec mocked", () => {

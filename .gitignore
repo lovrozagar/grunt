@@ -1,4 +1,6 @@
 .tmp/
+.rulesync/grunt.config.local.jsonc
 node_modules
 dist
 coverage
+

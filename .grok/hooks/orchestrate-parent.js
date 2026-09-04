@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** PreToolUse parent-deny on Claude+Grok+Antigravity; Stop = first-non-empty-line recap; stop-block survives host banners; SubagentStop is single-registration intercept.
 Parent Read/Grep/Glob/Bash/Web denied unless parent-escape (fat-gate still).
-SubagentStop intercepts need: search|exec with grunt-job verdicts.
+SubagentStop intercepts need: search|exec with grunt-job facts.
 Stop: first-non-empty-line [orchestrator]:/[grunt]:/[implementer]:/[thinker]:/[handoff]:/[tmp]: recap
 | parent-escape once; else block. MAX_STOP=3. No isCheap/trivia.
 Empty lastAssistantMessage → transcript_path tail-scan. Fail-open: parse/crash → empty stdout, exit 0.
@@ -34,11 +34,11 @@ export const ORCHESTRATOR_LOGS_DIR = ".tmp/grunt/orchestrator-logs";
 /** One-release dual-read; drop next release. */
 export const LEGACY_ORCHESTRATOR_LOGS_DIR = ".tmp/orchestrator-logs";
 export const DENY_REASON =
-  "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.";
+  "First action=spawn implementer|grunt|thinker. Deny expected. Only effective spawnMode=solo this session escapes.";
 export const STOP_REASONS = [
-  "Spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
-  "Still spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
-  "Last spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` one recap line; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
+  "Spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` tagged recap; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
+  "Still spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` tagged recap; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
+  "Last spawn: ⚠/validate/sim findings or writes remain after Implement pick/`/implement-plan`/explicit implement or parent just tried to Write → spawn implementer. Else facts → grunt. Else no spec/not small/simple → thinker then recap-stop. Else small/simple/defined → implementer. Thinker recap ≠ spec-ready. `ok`/`yes` ≠ implement. Else recap `[orchestrator]:` tagged recap; advise leftover numbered pick each on own line after (echo printed leftover; always-print typed triple).",
 ];
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 const PARENT_TOOLS = new Set([
@@ -386,6 +386,13 @@ function userPromptSubmit(data) {
   } else {
     unlinkStamp(data, "parent-escape");
   }
+  if (isHostStopBanner(prompt)) return 0;
+  emit({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: effectiveGruntContext(data),
+    },
+  });
   return 0;
 }
 
@@ -811,6 +818,17 @@ export function leftoverGateOf(data) {
     // unreadable stamp → fall through
   }
   return loadLeftoverGate(workspaceRootOf(data));
+}
+
+/** One-line UserPromptSubmit additionalContext from effective spawnMode + leftoverGate. */
+export function effectiveGruntContext(data) {
+  return (
+    "Effective grunt: spawnMode=" +
+    spawnModeOf(data) +
+    " leftoverGate=" +
+    leftoverGateOf(data) +
+    ". solo = no spawn-first spawn-if-asked parent tools on. cascade = first token spawn."
+  );
 }
 
 function unlinkQuiet(p) {

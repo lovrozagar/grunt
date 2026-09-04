@@ -264,7 +264,7 @@ describe("orchestrate-parent spawn rewrite", () => {
 });
 
 describe("capSpawnPrompt transcript + truncate", () => {
-  it("strips pasted transcripts and keeps first You are + verdict + abs paths", () => {
+  it("strips pasted transcripts and keeps first You are + facts + abs paths", () => {
     const raw = fs.readFileSync(
       path.join(here, "fixtures/spawn-transcript.txt"),
       "utf8",
@@ -277,7 +277,9 @@ describe("capSpawnPrompt transcript + truncate", () => {
     expect(out).not.toMatch(/^\[router\]:/m);
     expect(out).not.toMatch(/^\[implementer\]:/m);
     expect(out).not.toMatch(/You are grunt subagent/);
-    expect(out).toContain("verdict: ok");
+    expect(out).toContain("1 match.");
+    expect(out).toContain("- scripts/gate-fat-tools.mjs:1 — exists");
+    expect(out).not.toContain("verdict: ok");
     expect(out).toContain(
       "/home/ecomet/Development/grunt-test-2/scripts/gate-fat-tools.mjs",
     );
@@ -301,7 +303,11 @@ describe("capSpawnPrompt transcript + truncate", () => {
     const out = capSpawnPrompt(raw);
     expect(out.length).toBeGreaterThan(MAX_PROMPT_CHARS);
     expect(out).not.toContain(TRUNCATE_SUFFIX);
-    expect(out).toContain("verdict: ok");
+    expect(out).toContain("1 match.");
+    expect(out).toContain(
+      "- /home/ecomet/Development/grunt-test-2/README.md:1 — keep me",
+    );
+    expect(out).not.toContain("verdict: ok");
     expect(out).toContain("/home/ecomet/Development/grunt-test-2/README.md");
     const rewritten = rewriteSpawnToolInput({
       prompt: raw,

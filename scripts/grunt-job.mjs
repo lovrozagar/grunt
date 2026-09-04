@@ -109,11 +109,19 @@ export function looksHtmlOrUnbounded(stdout, stderr) {
   return false;
 }
 
-export function formatVerdict({ status, n, facts, errors }) {
-  const lines = [`verdict: ${status}`, `n: ${n}`];
-  if (status === "fail") {
+export function formatFacts({ kind, n = 0, facts, errors, failed = false }) {
+  const lines = [];
+  if (failed) {
+    lines.push(kind === "search" ? "Search failed." : "Command failed.");
     for (const e of (errors || []).slice(0, 3)) lines.push(`- ${e}`);
+  } else if (!n) {
+    lines.push(kind === "search" ? "No matches." : "No output.");
   } else {
+    if (kind === "search") {
+      lines.push(n === 1 ? "1 match." : `${n} matches.`);
+    } else {
+      lines.push(n === 1 ? "1 line." : `${n} lines.`);
+    }
     for (const f of (facts || []).slice(0, MAX_FACTS)) lines.push(`- ${f}`);
   }
   return lines.slice(0, 8).join("\n") + "\n";
@@ -153,17 +161,17 @@ function parseSearchHits(stdout) {
   return { n: hits.length, facts };
 }
 
-function verdictFromHits({ n, facts }) {
+function factsFromHits({ n, facts }) {
   if (!n) {
     return {
       fallback: false,
-      text: formatVerdict({ status: "empty", n: 0, facts: [] }),
+      text: formatFacts({ kind: "search", n: 0, facts: [] }),
       code: 0,
     };
   }
   return {
     fallback: false,
-    text: formatVerdict({ status: "ok", n, facts }),
+    text: formatFacts({ kind: "search", n, facts }),
     code: 0,
   };
 }
@@ -317,10 +325,10 @@ export function runSearch(query, { cwd, path: searchPath, glob } = {}) {
       return { fallback: true, text: FALLBACK + "\n", code: 2 };
     }
     if (r.status === 1) {
-      return verdictFromHits({ n: 0, facts: [] });
+      return factsFromHits({ n: 0, facts: [] });
     }
     if (r.status === 0) {
-      return verdictFromHits(parseSearchHits(stdout));
+      return factsFromHits(parseSearchHits(stdout));
     }
     if (r.status != null) {
       const errors = stderr
@@ -329,9 +337,9 @@ export function runSearch(query, { cwd, path: searchPath, glob } = {}) {
         .filter(Boolean);
       return {
         fallback: false,
-        text: formatVerdict({
-          status: "fail",
-          n: 0,
+        text: formatFacts({
+          kind: "search",
+          failed: true,
           errors: errors.length ? errors : [`rg exit ${r.status}`],
         }),
         code: 0,
@@ -339,7 +347,7 @@ export function runSearch(query, { cwd, path: searchPath, glob } = {}) {
     }
   }
 
-  return verdictFromHits(nodeSearch(query, { cwd: root, start, glob: globs }));
+  return factsFromHits(nodeSearch(query, { cwd: root, start, glob: globs }));
 }
 
 function alreadyRtk(query) {
@@ -368,9 +376,9 @@ export function runExec(query, { cwd } = {}) {
   if (r.error && r.error.code === "ENOENT") {
     return {
       fallback: false,
-      text: formatVerdict({
-        status: "fail",
-        n: 0,
+      text: formatFacts({
+        kind: "exec",
+        failed: true,
         errors: [String(r.error.code || "ENOENT")],
       }),
       code: 0,
@@ -395,9 +403,9 @@ export function runExec(query, { cwd } = {}) {
     }
     return {
       fallback: false,
-      text: formatVerdict({
-        status: "fail",
-        n: 0,
+      text: formatFacts({
+        kind: "exec",
+        failed: true,
         errors: errors.length ? errors : [`exit ${r.status}`],
       }),
       code: 0,
@@ -410,15 +418,15 @@ export function runExec(query, { cwd } = {}) {
   if (!lines.length && !stderr.trim()) {
     return {
       fallback: false,
-      text: formatVerdict({ status: "empty", n: 0, facts: [] }),
+      text: formatFacts({ kind: "exec", n: 0, facts: [] }),
       code: 0,
     };
   }
   const facts = (lines.length ? lines : [stderr.trim()]).slice(0, MAX_FACTS);
   return {
     fallback: false,
-    text: formatVerdict({
-      status: "ok",
+    text: formatFacts({
+      kind: "exec",
       n: lines.length || facts.length,
       facts,
     }),

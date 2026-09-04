@@ -22,11 +22,4 @@ Scratch/tmp → `{workspaceRoot}/.tmp/grunt/` root files only (mkdir as needed).
 `job: web` and messy test → LLM grunt (web_search/web_fetch).
 Live page ≠ `job:web`. Read pasted `.rulesync/skills/browser/SKILL.md`. `.rulesync/reference/browser.md` only if engine/doctor. No `job:browse`.
 Browser → `node scripts/browser.mjs <verb>` (`nav|snap|click|fill|shot|pdf|stop`). Lightpanda default. Never MCP. Never raw Playwright. Never env knobs.
-Isolation/write reply ≤8 lines. Verdict grammar only — no dumps/recap/HTML/JSON/full logs:
-
-```
-verdict: ok|fail|empty
-n: <count>
-- path:line — fact
-Fail: first 3 error lines.
-```
+Isolation/write reply ≤8 lines. Grunt-job facts only — size cap, not a tagged recap cipher; no dumps/HTML/JSON/full logs. Sentence plus up to 6 dash facts. Fail: first 3 error lines.

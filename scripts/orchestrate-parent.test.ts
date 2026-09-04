@@ -22,6 +22,7 @@ import {
   leftoverRequiredAsk,
   spawnModeOf,
   spawnModeStampPath,
+  effectiveGruntContext,
 } from "../.grok/hooks/orchestrate-parent.js";
 import { VALID_HANDOFF } from "./persist-handoff.test.ts";
 import { VALID_TMP } from "./persist-tmp.test.ts";
@@ -561,10 +562,10 @@ describe("orchestrate-parent Stop", () => {
     expect(output).toMatch(implementTriple);
     expect(output).toMatch(writeTriple);
     expect(output).toMatch(
-      /\[orchestrator\]: wrote \/abs\/a\n\n1\. Implement with verbal plan\n2\. Implement with file plan\n3\. Tweak/,
+      /\[orchestrator\]: .*\n\n1\. Implement with verbal plan\n2\. Implement with file plan\n3\. Tweak/,
     );
     expect(output).toMatch(
-      /\[orchestrator\]: advise-only how\. Remainder persist note\.\n\n1\. Write with verbal plan\n2\. Write with file plan\n3\. Tweak/,
+      /\[orchestrator\]: .*\n\n1\. Write with verbal plan\n2\. Write with file plan\n3\. Tweak/,
     );
     expect(output).toMatch(
       /one empty blank line immediately before leftover 1\./,
@@ -583,6 +584,63 @@ describe("orchestrate-parent Stop", () => {
     expect(STOP_REASONS.join("\n")).toMatch(/echo printed/);
     expect(STOP_REASONS.join("\n")).not.toMatch(/omit invalid kinds|Implementer with/);
     expect(STOP_REASONS.join("\n")).toMatch(/always-print typed triple/);
+  });
+
+  it("parent SSOT recap is tagged sentences not one-line echo", () => {
+    const recapFiles = [
+      ".rulesync/reference/output.md",
+      ".rulesync/reference/cascade.md",
+      ".rulesync/subagents/orchestrator.md",
+      ".rulesync/subagents/implementer.md",
+      ".rulesync/subagents/thinker.md",
+      ".rulesync/rules/overview.md",
+      ".rulesync/rules/CLAUDE.md",
+      ".rulesync/skills/explain/SKILL.md",
+    ];
+    const recapBan =
+      /one-line echo|one recap line|Still one recap line|\*\*one-line\*\* recap|one-line recap/;
+    for (const rel of recapFiles) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(text).not.toMatch(recapBan);
+    }
+    const output = fs.readFileSync(
+      path.join(root, ".rulesync/reference/output.md"),
+      "utf8",
+    );
+    const cascade = fs.readFileSync(
+      path.join(root, ".rulesync/reference/cascade.md"),
+      "utf8",
+    );
+    const implementer = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/implementer.md"),
+      "utf8",
+    );
+    const thinker = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/thinker.md"),
+      "utf8",
+    );
+    const grunt = fs.readFileSync(
+      path.join(root, ".rulesync/subagents/grunt.md"),
+      "utf8",
+    );
+    expect(output).toMatch(/Terse complete sentences/);
+    expect(output).toMatch(/First line is the glance/);
+    expect(output).toMatch(/Do not encode status tokens or `files:`\/`warn:` keys/);
+    expect(output).toMatch(/No fragments-OK/);
+    expect(output).toMatch(/No maximal superterse/);
+    expect(output).toMatch(/research\+advise done — implement on ask/);
+    expect(output).toMatch(/done — rulesync check \+ tests green/);
+    expect(output).toMatch(/leftover-gate done/);
+    expect(output).toMatch(/jsonc comments now just options:/);
+    expect(output).toMatch(/no compress-to-one-line/);
+    expect(output).toMatch(/Wrote a\.md\. Tests green/);
+    expect(cascade).toMatch(/tagged recap/);
+    expect(cascade).not.toMatch(/Echo last `\[thinker\]:` recap one-line/);
+    expect(implementer).toMatch(/output\.md/);
+    expect(thinker).toMatch(/\[thinker\]:/);
+    expect(thinker).toMatch(/why as prose/);
+    expect(grunt).toMatch(/Grunt-job facts|grunt-job facts/);
+    expect(grunt).toMatch(/not a tagged recap cipher|size cap/);
   });
 
   it("allows [orchestrator]: wait grunt", () => {
@@ -652,7 +710,7 @@ describe("orchestrate-parent Stop", () => {
   }
 
   const FIRST_TOKEN =
-    "You do not talk. First token = spawn. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry.";
+    "You do not talk. First token = spawn unless effective spawnMode is solo. Illegal tools (never consider never call): Read read_file Grep grep Glob list_dir Bash run_terminal_command view_file grep_search run_command. Not in toolkit. Hook deny = backstop not UX. Next=spawn not retry.";
 
   it("orchestrator host YAML is spawn/write/todo/peek allowlist only", () => {
     const claude = fs.readFileSync(
@@ -1647,7 +1705,7 @@ describe("orchestrate-parent SubagentStop intercept", () => {
     expect(result.stdout).toBe("");
   });
 
-  it("SubagentStop and Stop+subagentType with a search need: blocks and contains verdict:", () => {
+  it("SubagentStop and Stop+subagentType with a search need: blocks and contains facts", () => {
     const ws = workspace();
     fs.writeFileSync(path.join(ws, "hit.txt"), "unique-intercept-token-xyz\n");
     const need =
@@ -1672,10 +1730,13 @@ describe("orchestrate-parent SubagentStop intercept", () => {
         },
       );
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("verdict:");
+      expect(result.stdout).toContain("1 match.");
       const json = JSON.parse(result.stdout);
       expect(json.decision).toBe("block");
-      expect(json.hookSpecificOutput.additionalContext).toContain("verdict:");
+      expect(json.hookSpecificOutput.additionalContext).toContain("1 match.");
+      expect(json.hookSpecificOutput.additionalContext).toContain(
+        "unique-intercept-token-xyz",
+      );
       expect(json.hookSpecificOutput.hookEventName).toBe(event);
     }
   });
@@ -1781,7 +1842,7 @@ describe("orchestrate-parent hook config", () => {
         GROK_SESSION_ID: "tok",
       },
     );
-    expect(ok.stdout).toContain("verdict:");
+    expect(ok.stdout).toContain("1 match.");
     expect(() => JSON.parse(ok.stdout)).not.toThrow();
     const fail = runHook(
       {
@@ -2175,9 +2236,13 @@ describe("orchestrate-parent /solo", () => {
     expect(ssot).toMatch(/spawn-mode-\{sid\}/);
     expect(ssot).toMatch(/grunt-off-\{sid\}/);
     expect(ssot).toMatch(/\/cascade/);
-    expect(ssot).toMatch(/Agents\/Antigravity/);
-    expect(ssot).toMatch(/instruction-only/);
-    expect(ssot).toMatch(/cannot create stamp/);
+    expect(ssot).toMatch(/spawn-if-asked/);
+    expect(ssot).toMatch(/do not deny/);
+    expect(ssot).toMatch(/Stamp only on slash not on jsonc-only/);
+    expect(ssot).not.toMatch(/Claude\/Codex\/Grok/);
+    expect(ssot).not.toMatch(/Agents\/Antigravity/);
+    expect(ssot).not.toMatch(/instruction-only/);
+    expect(ssot).not.toMatch(/Do not spawn\./);
     for (const rel of [
       ".grok/skills/solo/SKILL.md",
       ".claude/skills/solo/SKILL.md",
@@ -2197,10 +2262,11 @@ describe("orchestrate-parent /solo", () => {
     expect(ssot).toMatch(/spawn-mode-\{sid\}/);
     expect(ssot).toMatch(/grunt-off-\{sid\}/);
     expect(ssot).toMatch(/\/solo/);
-    expect(ssot).toMatch(/`need:`\/`verdict:`/);
-    expect(ssot).toMatch(/Agents\/Antigravity/);
-    expect(ssot).toMatch(/instruction-only/);
-    expect(ssot).toMatch(/cannot unlink stamp/);
+    expect(ssot).toMatch(/`need:` JSON \/ grunt-job facts/);
+    expect(ssot).toMatch(/Stamp only on slash not on jsonc-only/);
+    expect(ssot).not.toMatch(/Claude\/Codex\/Grok/);
+    expect(ssot).not.toMatch(/Agents\/Antigravity/);
+    expect(ssot).not.toMatch(/instruction-only/);
     expect(ssot).not.toMatch(/multi-agent/);
     for (const rel of [
       ".grok/skills/cascade/SKILL.md",
@@ -2409,7 +2475,7 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     expect(JSON.parse(gj.stdout)).toMatchObject({ decision: "allow" });
   });
 
-  it("SSOT inlines maximal superterse every turn and create/change-files rows", () => {
+  it("SSOT cites output.md every turn and create/change-files rows", () => {
     for (const rel of [
       ".rulesync/subagents/orchestrator.md",
       ".rulesync/rules/overview.md",
@@ -2417,8 +2483,9 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     ]) {
       const text = fs.readFileSync(path.join(root, rel), "utf8");
       const body = text.replace(/^---[\s\S]*?---\s*/, "");
-      expect(body).toMatch(/maximal superterse/);
+      expect(body).toMatch(/output\.md/);
       expect(body).toMatch(/every turn/);
+      expect(body).not.toMatch(/maximal superterse/);
       expect(body).toMatch(/create\/change product files/);
       expect(body).toMatch(/file writes remain/);
     }
@@ -2481,9 +2548,9 @@ describe("parent-deny product Write/Edit/Bash/Skill", () => {
     expect(named).toEqual([]);
   });
 
-  it("DENY_REASON is spawn-first + deny-expected + /solo only", () => {
+  it("DENY_REASON is spawn-first + deny-expected + effective solo", () => {
     expect(DENY_REASON).toBe(
-      "First action=spawn implementer|grunt|thinker. Deny expected. Only /solo this session escapes.",
+      "First action=spawn implementer|grunt|thinker. Deny expected. Only effective spawnMode=solo this session escapes.",
     );
   });
 
@@ -3007,6 +3074,54 @@ describe("spawn-mode stamp", () => {
     expect(fs.existsSync(auto)).toBe(true);
   });
 
+  it("local jsonc overlay solo skips parent-deny without slash", () => {
+    const ws = workspace();
+    writeLeftoverConfig(
+      ws,
+      '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}',
+    );
+    fs.writeFileSync(
+      path.join(ws, ".rulesync/grunt.config.local.jsonc"),
+      '{"spawnMode":"solo"}',
+    );
+    const sid = "local-overlay";
+    expect(
+      withHookEnv(ws, sid, () => isSoloMode({ workspaceRoot: ws, sessionId: sid })),
+    ).toBe(true);
+    const bash = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "bash",
+        toolInput: { command: "ls" },
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    expect(JSON.parse(bash.stdout).decision).toBe("allow");
+    const spawn = runHook(
+      {
+        hookEventName: "PreToolUse",
+        toolName: "task",
+        toolInput: { prompt: "do the thing" },
+        workspaceRoot: ws,
+        sessionId: sid,
+      },
+      {
+        GROK_HOOK_EVENT: "pre_tool_use",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: sid,
+      },
+    );
+    const spawnOut = JSON.parse(spawn.stdout);
+    expect(spawnOut.decision).toBe("allow");
+    expect(spawnOut.hookSpecificOutput).toBeUndefined();
+  });
+
   it("config solo skips parent-deny and Stop-before-parent-escape; defaultGrunt skipped", () => {
     const ws = workspace();
     writeLeftoverConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}');
@@ -3051,6 +3166,150 @@ describe("spawn-mode stamp", () => {
     const spawnOut = JSON.parse(spawn.stdout);
     expect(spawnOut.decision).toBe("allow");
     expect(spawnOut.hookSpecificOutput).toBeUndefined();
+  });
+});
+
+const RESIDUAL =
+  "jsonc-solo and no `/solo` yet → model spawn-first; hook skip-deny if host runs hooks. Hosts without hooks: jsonc-solo is enforcement no-op; still spawn-first until `/solo`.";
+
+describe("protocol host-neutral solo", () => {
+  const protocolFiles = [
+    ".rulesync/rules/overview.md",
+    ".rulesync/rules/CLAUDE.md",
+    ".rulesync/reference/cascade.md",
+    ".rulesync/skills/solo/SKILL.md",
+    ".rulesync/skills/cascade/SKILL.md",
+    ".rulesync/skills/auto/SKILL.md",
+    ".rulesync/skills/ask/SKILL.md",
+    ".rulesync/subagents/orchestrator.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+  ];
+
+  it("no provider-branch solo text; residual jsonc-solo spawn-first gone", () => {
+    for (const rel of protocolFiles) {
+      const t = fs.readFileSync(path.join(root, rel), "utf8");
+      expect(t, rel).not.toMatch(/Claude\/Codex\/Grok:/);
+      expect(t, rel).not.toMatch(/Agents\/Antigravity/);
+      expect(t, rel).not.toMatch(/UPS inject/);
+      expect(t, rel).not.toMatch(/generate overlay/);
+      expect(t, rel).not.toMatch(/additionalContext inject/);
+      expect(t, rel).not.toMatch(/emit-config-mode/);
+      expect(t, rel).not.toContain(RESIDUAL);
+      expect(t, rel).not.toMatch(/Not jsonc\. Not additionalContext/);
+      expect(t, rel).not.toMatch(/LLM keys solo off slash\/history not jsonc/);
+    }
+    const hook = fs.readFileSync(orchParent, "utf8");
+    expect(hook).toMatch(/additionalContext:[\s\S]{0,80}effectiveGruntContext/);
+    expect(hook).not.toMatch(/generateAGENTS|generate-AGENTS/);
+    expect(hook).toMatch(/isSoloMode/);
+    expect(hook).toMatch(/if \(isSoloMode\(data\)\) \{/);
+  });
+});
+
+describe("UserPromptSubmit effective pair", () => {
+  function upsJson(result: { status: number | null; stdout: string }) {
+    expect(result.status).toBe(0);
+    return JSON.parse(result.stdout) as {
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+  }
+
+  it("jsonc solo no stamp; overlay solo over committed cascade; stamp cascade over jsonc solo; leftoverGate auto", () => {
+    const ws = workspace();
+    writeLeftoverConfig(
+      ws,
+      '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}',
+    );
+    const sid = "ups-jsonc-solo";
+    const jsonc = upsJson(submitPrompt(ws, sid, "hello"));
+    expect(jsonc.hookSpecificOutput?.additionalContext).toBe(
+      "Effective grunt: spawnMode=solo leftoverGate=ask. solo = no spawn-first spawn-if-asked parent tools on. cascade = first token spawn.",
+    );
+    expect(
+      withHookEnv(ws, sid, () =>
+        effectiveGruntContext({ workspaceRoot: ws, sessionId: sid }),
+      ),
+    ).toBe(jsonc.hookSpecificOutput?.additionalContext);
+
+    const overlayWs = workspace();
+    writeLeftoverConfig(
+      overlayWs,
+      '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}',
+    );
+    fs.writeFileSync(
+      path.join(overlayWs, ".rulesync/grunt.config.local.jsonc"),
+      '{"spawnMode":"solo"}',
+    );
+    const overlaySid = "ups-overlay-solo";
+    const overlay = upsJson(submitPrompt(overlayWs, overlaySid, "hello"));
+    expect(overlay.hookSpecificOutput?.additionalContext).toContain(
+      "spawnMode=solo leftoverGate=ask",
+    );
+
+    const stampWs = workspace();
+    writeLeftoverConfig(
+      stampWs,
+      '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}',
+    );
+    const stampSid = "ups-stamp-cascade";
+    const stamped = upsJson(submitPrompt(stampWs, stampSid, "/cascade"));
+    expect(stamped.hookSpecificOutput?.additionalContext).toContain(
+      "spawnMode=cascade leftoverGate=ask",
+    );
+
+    const autoWs = workspace();
+    writeLeftoverConfig(
+      autoWs,
+      '{"version":1,"leftoverGate":"auto","spawnMode":"cascade"}',
+    );
+    const autoSid = "ups-auto";
+    const auto = upsJson(submitPrompt(autoWs, autoSid, "hello"));
+    expect(auto.hookSpecificOutput?.additionalContext).toContain(
+      "spawnMode=cascade leftoverGate=auto",
+    );
+  });
+
+  it("skips host Stop banners; sid-less still gets jsonc", () => {
+    const ws = workspace();
+    writeLeftoverConfig(
+      ws,
+      '{"version":1,"leftoverGate":"ask","spawnMode":"solo"}',
+    );
+    const banner = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "Stop hook feedback: spawn implementer",
+        workspaceRoot: ws,
+        sessionId: "ups-banner",
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "ups-banner",
+      },
+    );
+    expect(banner.status).toBe(0);
+    expect(banner.stdout).toBe("");
+
+    const sidless = runHook(
+      {
+        hookEventName: "UserPromptSubmit",
+        prompt: "hello",
+        workspaceRoot: ws,
+        sessionId: "",
+      },
+      {
+        GROK_HOOK_EVENT: "user_prompt_submit",
+        GROK_WORKSPACE_ROOT: ws,
+        GROK_SESSION_ID: "",
+      },
+    );
+    expect(sidless.status).toBe(0);
+    const json = JSON.parse(sidless.stdout);
+    expect(json.hookSpecificOutput.additionalContext).toContain(
+      "spawnMode=solo leftoverGate=ask",
+    );
   });
 });
 
@@ -3174,7 +3433,7 @@ describe("PARENT_SKILLS + Write-typed auto", () => {
     expect(writePlan).toMatch(/never spawn implementer/);
     expect(implPlan).toMatch(/Write-typed under auto: no implementer this turn/);
     const hook = fs.readFileSync(orchParent, "utf8");
-    expect(hook).not.toMatch(/leftoverGateOf\([^)]*\)[^{]*spawn/s);
+    expect(hook).not.toMatch(/leftoverGateOf\([^)]*\)[^{]{0,80}SPAWN_TOOLS/s);
     expect(hook).toMatch(/leftoverGateOf\(data\) !== "auto"/);
     expect(hook).not.toMatch(
       /if \(leftoverGateOf\(data\) === "auto"\)[\s\S]{0,200}SPAWN/,

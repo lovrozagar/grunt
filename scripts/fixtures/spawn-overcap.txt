@@ -2,6 +2,5 @@ You are implementer subagent. Task: /home/ecomet/Development/grunt-test-2/README
 Human: paste
 Assistant: paste
 XXXX_PAD
-verdict: ok
-n: 1
+1 match.
 - /home/ecomet/Development/grunt-test-2/README.md:1 — keep me

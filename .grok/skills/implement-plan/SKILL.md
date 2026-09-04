@@ -93,13 +93,9 @@ Wait. Spawn fail → `[implementer]: failed: {err}` stop.
 Recap from implementer output only. No parent Read/Grep/Bash.
 
 ```
-[implementer]: serial={int} path=.tmp/grunt/plans/{file} status={status} done={x}/{total}
-files: {abs paths}
-{if leftover:}
-leftover:
-{up to 10 open leaf lines}
-{if blocked:} blocked: {reason}
+[implementer]: Plan {int} at .tmp/grunt/plans/{file} is {status}. Done {x}/{total}. Wrote {abs paths}.
 ```
+Open leaves and blockers stay in the sentences.
 
 ## Rules
 
@@ -110,8 +106,8 @@ leftover:
 - No auto `/write-plan` chain. Escalation → tell user to `/write-plan` a follow-up.
 - Omit `model`. `subagent_type: implementer` only for this skill.
 - First prompt sentence: `You are implementer subagent.`
-- Child prompt = task + abs paths + verdicts only (no pasted transcripts).
-- Resume prompt = `You are implementer subagent.` + new verdicts only. Do not re-send the original task. Max 3 `resume_from` per child id; then report blocked/partial.
+- Child prompt = task + abs paths + facts (no pasted transcripts).
+- Resume prompt = `You are implementer subagent.` + new facts only. Do not re-send the original task. Max 3 `resume_from` per child id; then report blocked/partial.
 - Tool-call first for spawn claims.
 - Do not re-plan. Partial = skill success (plan file is SoT).
 - `/pickup` stays handoffs only. Do not merge.

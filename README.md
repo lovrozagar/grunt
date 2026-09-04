@@ -106,12 +106,12 @@ SoT: `.rulesync/subagents/{orchestrator grunt implementer thinker}.md`
 
 Emit: `.claude/` `.grok/` `.agents/` `.gemini/`
 
-- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) one-line recap; advise leftover numbered pick each on own line after that recap; one empty blank line immediately before leftover 1. (leftover last; not adjacent to recap/body) — do not cram `1. Implementer with verbal plan 2. Implementer with file plan 3. Tweak` onto the recap line. `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/tmp` writes `.tmp/grunt/{serial}-{slug}-{stamp}.{ext}`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
-- **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation `verdict:`. Never feature solution. Never spawn. Snippet/cite/"what is X"/world fact: `job: web`. URL/browse/click/fill/snap/live DOM: browser rail (`node scripts/browser.mjs`; Lightpanda default); child prompt includes `.rulesync/skills/browser/SKILL.md` + `.rulesync/reference/browser.md`; never websearch that page. URL-in-a-cite ≠ browse. No `job:browse`; parent does not Skill-invoke `browser`
+- **orchestrator** (parent) — always spawn+prompt; user-facing `[orchestrator]:` (or child role tag) tagged recap; advise leftover numbered pick each on own line after that recap; one empty blank line immediately before leftover 1. (leftover last; not adjacent to recap/body) — do not cram `1. Implementer with verbal plan 2. Implementer with file plan 3. Tweak` onto the recap line. `/parent` one-turn; `/handoff` writes `.tmp/grunt/handoffs/{serial}-{slug}-{stamp}.md`; `/tmp` writes `.tmp/grunt/{serial}-{slug}-{stamp}.{ext}`; `/pickup` spawn-first pickup (inverse of `/handoff`; not a mode). `/solo` session escape; `/cascade` restores it. Small/low router. First token spawn. No parent Read/Bash/Grep. Does not implement, plan, or fetch world facts
+- **grunt** — tools: facts/search/exec/git/web/test/low-reason mechanical write. Isolation grunt-job facts (≤8 lines). Never feature solution. Never spawn. Snippet/cite/"what is X"/world fact: `job: web`. URL/browse/click/fill/snap/live DOM: browser rail (`node scripts/browser.mjs`; Lightpanda default); child prompt includes `.rulesync/skills/browser/SKILL.md` + `.rulesync/reference/browser.md`; never websearch that page. URL-in-a-cite ≠ browse. No `job:browse`; parent does not Skill-invoke `browser`
 - **implementer** — write already-defined solution on allowlisted paths. TDD when spec/plan says tests. Validate + sim after write. Fat dumps via `need:`. Never spawn. Never plan. Id is **implementer** (not Implementor)
 - **thinker** — think/plan/advise/recommend/how/why/explain; unsure→thinker; cheap false+; edge cases. Read-only named-file Read of prompt SSOT; trees/search/exec/web/test → `need:`. Never spawn. No bash. Never implement
 
-Children never spawn. Spawn only grunt|implementer|thinker. Omit model on spawn; frontmatter on agent files picks haiku/sonnet/opus vs grok-4.5 / grok-4.6 / other hosts. Voice: `.rulesync/reference/output.md`. Protocol: `.rulesync/reference/cascade.md`. `AGENTS.md`/`CLAUDE.md` spawn-first. `GEMINI.md` → `@AGENTS.md`. Goals: synced configs across grok build claude code codex gemini cli antigravity; max situational speed; superterse token savings; max/min reasoning by role.
+Children never spawn. Spawn only grunt|implementer|thinker. Omit model on spawn; frontmatter on agent files picks haiku/sonnet/opus vs grok-4.5 / grok-4.6 / other hosts. Voice: `.rulesync/reference/output.md`. Protocol: `.rulesync/reference/cascade.md`. `AGENTS.md`/`CLAUDE.md` spawn-first. `GEMINI.md` → `@AGENTS.md`. Goals: synced configs across grok build claude code codex gemini cli antigravity; max situational speed; terse complete sentences; max/min reasoning by role.
 
 ## Browser
 
@@ -180,7 +180,7 @@ Same topology as the session recap; every legal edge labeled.
 ```
  USER
   │
-  │  session in/out  (parent only; tagged one-line recap; advise leftover blank then 1./2./3. own lines)
+  │  session in/out  (parent only; tagged recap; advise leftover blank then 1./2./3. own lines)
   │  TUI local; completion tokens from Model API (mixed)
   ▼
 ┌──────────────────────── CLI HOST (this process) ────────────────────────┐
@@ -240,7 +240,7 @@ Same topology as the session recap; every legal edge labeled.
 
 ### `need:` / `resume_from`
 
-Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON line. Parent fans those jobs as **parallel grunt** siblings, then one `resume_from` with **new** `verdict:` blobs only. Max **3** `resume_from` per child id. Thinker has no Bash; facts go through this loop. Grunt does not emit `need:` for its own tool use.
+Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON line. Parent fans those jobs as **parallel grunt** siblings, then one `resume_from` with **new** facts only. Max **3** `resume_from` per child id. Thinker has no Bash; facts go through this loop. Grunt does not emit `need:` for its own tool use.
 
 ```
  implementer | thinker
@@ -256,9 +256,9 @@ Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON l
       │
       │  isolation
       ▼
- verdict: ok|fail|empty
+ grunt-job facts
       │
-      │  one resume_from:<child id>  + new verdicts only
+      │  one resume_from:<child id>  + new facts only
       │  do not re-send original task; max 3
       ▼
  same child continues  (transcript already on resume_from)
@@ -269,7 +269,7 @@ Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON l
 | node | inside host? | local vs AI-server | notes |
 | --- | --- | --- | --- |
 | User | no | mixed | Speaks only to parent session. Never a child edge. |
-| Session in/out / TUI | yes | mixed | TUI is local; recap tokens come from the model. Legal `[role]:` one-line recap; advise leftover numbered pick each on own line after; one empty blank line immediately before leftover 1. (not crammed onto the recap line). |
+| Session in/out / TUI | yes | mixed | TUI is local; recap tokens come from the model. Legal `[role]:` tagged recap; advise leftover numbered pick each on own line after; one empty blank line immediately before leftover 1. (not crammed onto the recap line). |
 | CLI host process | yes (is the box) | local process | Grok Build / Claude Code / Codex / Gemini / Antigravity. Not a peer of another CLI. |
 | Parent orchestrator | yes | AI-server **turn** | Spawn-first low router. No parent Read/Bash/Grep. Lives in this session, not a sidecar. |
 | `grunt` sibling | yes | AI-server **turn** | Facts/tools/mechanical write. Never spawn. Never feature solution. |
@@ -279,7 +279,7 @@ Implementer or thinker that still needs a fat dump **stops** on a `need:` JSON l
 | Workspace fs tools | yes | **local** | Read/Grep/Glob/Write (and host aliases). Parent is denied these except documented persist paths / `/solo`. |
 | Bash / `run_terminal_command` | yes | **local** | RTK wraps stdout on PreToolUse. Thinker has no Bash. |
 | RTK | yes | **local** | Bash/shell stdout compression only. Not Read/Grep/Glob/prompts/images. |
-| `scrub-spawn-prompt` / `parse-need` / `grunt-job` | yes | **local** | Hooks and scripts. Isolation `verdict:` is grunt output, not a model hop. |
+| `scrub-spawn-prompt` / `parse-need` / `grunt-job` | yes | **local** | Hooks and scripts. Isolation facts are grunt-job output, not a model hop. |
 | emit / generate / init | yes (this repo / install) | **local** | Writes other-CLI configs. Not a runtime line to those CLIs. |
 | WebSearch / web_fetch | tool from host | **remote-not-LLM** | Network search/fetch. Not a second Model API box. Snippet/cite/"what is X"/world fact: grunt `job: web`. Live URL/DOM: grunt browser rail, not this box. |
 | MCP | policy deny | n/a | Denied by policy in-tree. Do not draw as a main path. |
@@ -296,9 +296,9 @@ Use these labels. Do not revive “prompt input” or “agent to use”.
 | **session in/out** | User ↔ parent only. Children have no user edge. |
 | **spawn** | Parent → `grunt` \| `implementer` \| `thinker`. First sentence: `You are {agent} subagent.` Omit model. |
 | **peek** | Parent reads host status on the child id. Real host fields. `timeout_ms=60000`. GAP hosts: no fake peeks; block on spawn return = `done`. |
-| **resume_from** | Parent continues the **same** child id with new `verdict:` blobs only. Max 3. Not a fresh spawn. |
+| **resume_from** | Parent continues the **same** child id with new facts only. Max 3. Not a fresh spawn. |
 | **need:** | Child stop line: fat dump jobs for parent to fan as grunt. Cap 4 jobs per batch. |
-| **verdict:** | Grunt isolation result back onto `resume_from`. `ok\|fail\|empty`. Short facts, not dumps. |
+| **facts** | Grunt isolation result back onto `resume_from`. Sentence plus dash facts, not dumps. |
 | **tool call** | Child (or, illegally if parent, denied) → host tools. |
 | **RTK** | PreToolUse Bash/shell → compressed stdout. No other tools. |
 | **completion** | Parent and children → **one** Model API (this host’s SDK). |
@@ -328,7 +328,7 @@ Repo-relative (repository root):
 
 - `.rulesync/reference/INDEX.md` — aggregate catalog composed from slices (law.md, skills-map.md, refs-map.md). Maps/law = slices for deep dive. Always. Not if-maps-else
 - `.rulesync/reference/law.md` — domain law stub (protocol stays cascade/overview)
-- `.rulesync/reference/cascade.md` — parent-only spawn, peek/kill table, `need:` / `resume_from`, isolation `verdict:`
+- `.rulesync/reference/cascade.md` — parent-only spawn, peek/kill table, `need:` / `resume_from`, isolation facts
 - `.rulesync/reference/rtk.md` — Bash/shell stdout compression
 - `.rulesync/reference/map.md` — cheap outline of protocol, scripts, generated trees
 - `.rulesync/subagents/orchestrator.md`

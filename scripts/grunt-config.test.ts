@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CONFIG_REL,
   LEFTOVER_GATES,
+  LOCAL_CONFIG_REL,
   SPAWN_MODES,
   loadLeftoverGate,
   loadSpawnMode,
@@ -30,6 +31,12 @@ function tmpWs() {
 
 function writeConfig(ws: string, body: string) {
   const abs = path.join(ws, CONFIG_REL);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, body);
+}
+
+function writeLocal(ws: string, body: string) {
+  const abs = path.join(ws, LOCAL_CONFIG_REL);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, body);
 }
@@ -207,6 +214,60 @@ describe("key independence", () => {
   });
 });
 
+describe("local jsonc overlay", () => {
+  it("overlays leftoverGate/spawnMode over committed; ignores bad local keys", () => {
+    const ws = tmpWs();
+    writeConfig(ws, '{"version":1,"leftoverGate":"ask","spawnMode":"cascade"}');
+    expect(loadLeftoverGate(ws)).toBe("ask");
+    expect(loadSpawnMode(ws)).toBe("cascade");
+
+    writeLocal(ws, '{"leftoverGate":"auto","spawnMode":"solo"}');
+    expect(loadLeftoverGate(ws)).toBe("auto");
+    expect(loadSpawnMode(ws)).toBe("solo");
+
+    writeLocal(ws, '{"leftoverGate":"AUTO","spawnMode":"SOLO"}');
+    expect(loadLeftoverGate(ws)).toBe("ask");
+    expect(loadSpawnMode(ws)).toBe("cascade");
+
+    writeLocal(ws, '{"leftoverGate":"auto"}');
+    expect(loadLeftoverGate(ws)).toBe("auto");
+    expect(loadSpawnMode(ws)).toBe("cascade");
+
+    writeLocal(ws, "{ not json");
+    expect(loadLeftoverGate(ws)).toBe("ask");
+    expect(loadSpawnMode(ws)).toBe("cascade");
+  });
+
+  it("local without committed does not invent config", () => {
+    const ws = tmpWs();
+    writeLocal(ws, '{"version":1,"leftoverGate":"auto","spawnMode":"solo"}');
+    expect(loadLeftoverGate(ws)).toBe("ask");
+    expect(loadSpawnMode(ws)).toBe("cascade");
+  });
+
+  it("unreadable local ignored; committed still loads", () => {
+    const ws = tmpWs();
+    writeConfig(ws, '{"version":1,"leftoverGate":"auto","spawnMode":"solo"}');
+    writeLocal(ws, '{"leftoverGate":"ask","spawnMode":"cascade"}');
+    fs.chmodSync(path.join(ws, LOCAL_CONFIG_REL), 0);
+    expect(loadLeftoverGate(ws)).toBe("auto");
+    expect(loadSpawnMode(ws)).toBe("solo");
+    fs.chmodSync(path.join(ws, LOCAL_CONFIG_REL), 0o644);
+  });
+
+  it("example exists; live overlay is gitignored", () => {
+    const example = path.join(root, `${LOCAL_CONFIG_REL}.example`);
+    expect(fs.existsSync(example)).toBe(true);
+    const gi = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+    expect(gi).toMatch(/\.rulesync\/grunt\.config\.local\.jsonc/);
+    const raw = fs.readFileSync(example, "utf8");
+    expect(raw).toMatch(/"spawnMode":\s*"solo"/);
+    expect(raw).toMatch(/gitignored/);
+    const obj = JSON.parse(stripJsonc(raw));
+    expect(obj.spawnMode).toBe("solo");
+  });
+});
+
 describe("committed jsonc", () => {
   it("keys leftoverGate spawnMode version; leftover ask; spawn cascade", () => {
     const raw = fs.readFileSync(path.join(root, CONFIG_REL), "utf8");
@@ -224,8 +285,10 @@ describe("committed jsonc", () => {
     expect(raw).not.toMatch(/version≠1/);
     expect(raw).not.toMatch(/Only leftoverGate is configurable here/);
     expect(raw).not.toMatch(/spawnMode\/solo\/cascade intentionally/);
-    expect(loadLeftoverGate(root)).toBe("ask");
-    expect(loadSpawnMode(root)).toBe("cascade");
+    const isolated = tmpWs();
+    writeConfig(isolated, raw);
+    expect(loadLeftoverGate(isolated)).toBe("ask");
+    expect(loadSpawnMode(isolated)).toBe("cascade");
     const obj = JSON.parse(stripJsonc(raw));
     expect(Object.keys(obj).sort()).toEqual([
       "leftoverGate",

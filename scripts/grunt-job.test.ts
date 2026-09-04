@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FALLBACK,
+  formatFacts,
   parseArgv,
   runJob,
   shouldFallback,
@@ -77,6 +78,31 @@ describe("shouldFallback", () => {
   });
 });
 
+describe("formatFacts", () => {
+  it("prints 1 vs n sentences for search and exec", () => {
+    expect(formatFacts({ kind: "search", n: 0 })).toBe("No matches.\n");
+    expect(formatFacts({ kind: "search", n: 1, facts: ["a:1 — x"] })).toBe(
+      "1 match.\n- a:1 — x\n",
+    );
+    expect(formatFacts({ kind: "search", n: 3, facts: ["a", "b", "c"] })).toBe(
+      "3 matches.\n- a\n- b\n- c\n",
+    );
+    expect(formatFacts({ kind: "search", failed: true, errors: ["err"] })).toBe(
+      "Search failed.\n- err\n",
+    );
+    expect(formatFacts({ kind: "exec", n: 0 })).toBe("No output.\n");
+    expect(formatFacts({ kind: "exec", n: 1, facts: ["hi"] })).toBe(
+      "1 line.\n- hi\n",
+    );
+    expect(formatFacts({ kind: "exec", n: 3, facts: ["a", "b", "c"] })).toBe(
+      "3 lines.\n- a\n- b\n- c\n",
+    );
+    expect(formatFacts({ kind: "exec", failed: true, errors: ["exit 1"] })).toBe(
+      "Command failed.\n- exit 1\n",
+    );
+  });
+});
+
 describe("runJob search", () => {
   it("ok when the pattern hits this repo", () => {
     const r = runJob({
@@ -85,8 +111,9 @@ describe("runJob search", () => {
       cwd: root,
     });
     expect(r.fallback).toBe(false);
-    expect(r.text).toMatch(/^verdict: ok\n/);
-    expect(r.text).toMatch(/^n: /m);
+    expect(r.text).toMatch(/^\d+ match(?:es)?\.\n/);
+    expect(r.text).toMatch(/^- /m);
+    expect(r.text).not.toMatch(/^verdict:/m);
     expect(r.text.split("\n").filter(Boolean).length).toBeLessThanOrEqual(8);
   });
 
@@ -100,7 +127,7 @@ describe("runJob search", () => {
       cwd: dir,
     });
     expect(r.fallback).toBe(false);
-    expect(r.text).toBe("verdict: empty\nn: 0\n");
+    expect(r.text).toBe("No matches.\n");
     expect(r.code).toBe(0);
   });
 });
@@ -117,14 +144,14 @@ describe("runJob search flags", () => {
     const env = { ...process.env, PATH: pathSansRg() };
     const or = runCli(["--job", "search", "--query", "hello|world"], { cwd: dir, env });
     expect(or.status).toBe(0);
-    expect(or.stdout).toMatch(/^verdict: ok\n/);
+    expect(or.stdout).toMatch(/^\d+ match(?:es)?\.\n/);
     expect(or.stdout).toMatch(/hello|world/);
     const scoped = runCli(
       ["--job", "search", "--query", "hello|world", "--path", "sub"],
       { cwd: dir, env },
     );
     expect(scoped.status).toBe(0);
-    expect(scoped.stdout).toMatch(/^verdict: ok\n/);
+    expect(scoped.stdout).toMatch(/^\d+ match(?:es)?\.\n/);
     expect(scoped.stdout).toMatch(/sub\/c\.txt/);
     expect(scoped.stdout).not.toMatch(/a\.txt/);
     fs.writeFileSync(path.join(dir, "e.md"), "hello\n");
@@ -148,22 +175,19 @@ describe("runJob exec", () => {
   it("ok on a successful command", () => {
     const r = runJob({ job: "exec", query: "echo hi", cwd: root });
     expect(r.fallback).toBe(false);
-    expect(r.text).toMatch(/^verdict: ok\n/);
-    expect(r.text).toMatch(/^n: /m);
-    expect(r.text).toMatch(/^- hi$/m);
+    expect(r.text).toBe("1 line.\n- hi\n");
     expect(r.text.split("\n").filter(Boolean).length).toBeLessThanOrEqual(8);
   });
 
   it("fail on a nonzero command", () => {
     const r = runJob({ job: "exec", query: "false", cwd: root });
-    expect(r.text).toMatch(/^verdict: fail\n/);
-    expect(r.text).toMatch(/^n: /m);
+    expect(r.text).toMatch(/^Command failed\.\n/);
     expect(r.text.split("\n").filter(Boolean).length).toBeLessThanOrEqual(8);
   });
 
   it("empty on a silent success", () => {
     const r = runJob({ job: "exec", query: "true", cwd: root });
-    expect(r.text).toBe("verdict: empty\nn: 0\n");
+    expect(r.text).toBe("No output.\n");
   });
 
   it("FALLBACK on shell meta; --cwd + true ok", () => {
@@ -175,7 +199,7 @@ describe("runJob exec", () => {
     tmpDirs.push(dir);
     const cli = runCli(["--job", "exec", "--query", "true", "--cwd", "."], { cwd: dir });
     expect(cli.status).toBe(0);
-    expect(cli.stdout).toBe("verdict: empty\nn: 0\n");
+    expect(cli.stdout).toBe("No output.\n");
     const escape = runCli(["--job", "exec", "--query", "true", "--cwd", ".."], { cwd: dir });
     expect(escape.status).toBe(2);
     expect(escape.stdout).toBe(FALLBACK + "\n");
@@ -186,14 +210,13 @@ describe("runJob test", () => {
   it("ok on a bounded successful command", () => {
     const r = runJob({ job: "test", query: "echo hi", cwd: root });
     expect(r.fallback).toBe(false);
-    expect(r.text).toMatch(/^verdict: ok\n/);
-    expect(r.text).toMatch(/^- hi$/m);
+    expect(r.text).toBe("1 line.\n- hi\n");
   });
 
   it("fail on a nonzero command", () => {
     const r = runJob({ job: "test", query: "false", cwd: root });
     expect(r.fallback).toBe(false);
-    expect(r.text).toMatch(/^verdict: fail\n/);
+    expect(r.text).toMatch(/^Command failed\.\n/);
   });
 
   it("FALLBACK on denylist query", () => {

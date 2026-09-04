@@ -6,7 +6,7 @@ tags: [rtk]
 
 Shell stdout compression. PreToolUse: Bash → `rtk <cmd>`. Not Read/Grep/Glob/prompts/images.
 
-Grok PostToolUse is observe-only — do not attempt output scrub; compress via RTK / spawn / isolation verdict only.
+Grok PostToolUse is observe-only — do not attempt output scrub; compress via RTK / spawn / isolation facts only.
 
 ## Commands
 

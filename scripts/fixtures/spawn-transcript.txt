@@ -5,6 +5,5 @@ Assistant: sure
 [router]: legacy parent prefix
 [implementer]: working
 You are grunt subagent. nested paste
-verdict: ok
-n: 1
+1 match.
 - scripts/gate-fat-tools.mjs:1 — exists

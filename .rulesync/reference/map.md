@@ -32,7 +32,7 @@ Cheap outline. Not a file dump.
 - `.grok/global-settings.toml` — merged into `~/.grok/config.toml` by `scripts/sync-global-settings.mjs` (not auto-loaded; project config cannot set `[features]`)
 - `.rulesync/global-settings/` — host manifest and reserved noop payloads
 - `.rulesync/mcp-policy.jsonc` — MCP deny-default SSOT (`default: deny`, `allow: []`)
-- `.rulesync/grunt.config.jsonc` — leftover-gate + spawnMode SSOT (`version` `1`, `leftoverGate` `ask`|`auto` committed default `ask`, `spawnMode` `solo`|`cascade` committed default `cascade` never `solo`). Effective spawn: stamp `spawn-mode-{sid}` > one-release `grunt-off` > config > `cascade`. Fail-closed cascade. Keys independent.
+- `.rulesync/grunt.config.jsonc` — leftover-gate + spawnMode SSOT (`version` `1`, `leftoverGate` `ask`|`auto` committed default `ask`, `spawnMode` `solo`|`cascade` committed default `cascade`; overlay may be solo). Gitignored overlay `.rulesync/grunt.config.local.jsonc` (example committed) merges leftoverGate/spawnMode over committed for hook/Stop/UserPromptSubmit. Never rewrite committed AGENTS. Hook effective spawn: stamp `spawn-mode-{sid}` > one-release `grunt-off` > config > `cascade`. Fail-closed cascade. LLM keys solo off effective spawnMode via UserPromptSubmit additionalContext. Keys independent.
 - `.rulesync/skills/{parent,explain,handoff,pickup,solo,cascade,auto,ask,commit,commit-and-push,commit-push,commit-push-deploy,commit-push-release,browser,write-plan,implement-plan}/` — skill SSOT; `rulesync -f skills` emits `.grok/skills/`, `.claude/skills/`, `.agents/skills/` byte-equal. `/cascade` = exit solo / restore cascade (not a sticky second mode). `/auto` `/ask` = session leftover-gate (not spawn-escape)
 
 ## Scripts
@@ -52,7 +52,7 @@ Cheap outline. Not a file dump.
 - `scripts/emit-gemini.mjs` — `GEMINI.md` (`@AGENTS.md`) + `.gemini/agents/{id}/agent.md` from `.rulesync/subagents` (not `rulesync -t geminicli`); no prune; does not touch settings
 - `scripts/emit-agent-shell-tools.mjs` — after rulesync subagents: rewrite `.claude/agents/grunt.md` body `Bash`; grok/codex/gemini/generic keep `run_terminal_command`
 - `scripts/browser.mjs` — session browser rail `nav|snap|click|fill|shot|pdf|stop`; Lightpanda default; Chromium on verb/OS/probe/paint-host/one-escalate; `.tmp/grunt/browser/`
-- `scripts/grunt-config.mjs` — `loadLeftoverGate(workspaceRoot)` fail-closed `ask`; `loadSpawnMode(workspaceRoot)` fail-closed `cascade`; keys independent
+- `scripts/grunt-config.mjs` — `loadLeftoverGate(workspaceRoot)` fail-closed `ask`; `loadSpawnMode(workspaceRoot)` fail-closed `cascade`; local overlay over committed; keys independent
 
 ## Tmp
 - `.tmp/grunt/plans/` — persist-plan / parent / implementer; format SSOT = `.rulesync/reference/plan-format.md`
@@ -63,7 +63,7 @@ Cheap outline. Not a file dump.
 
 ## Stamps (`.tmp/grunt/orchestrator-logs/`)
 - `tools-used` / `stop-block` / `need-intercept` / `parent-escape` / `auto-ask` / `spawn-mode` — Stop does not waive impl finals for `tools-used`; `/parent` writes `parent-escape-{sid}` once
-- `spawn-mode-{sid}` — spawn session stamp. Body `solo`|`cascade`. Slash==config unlinks. Sid-less: no stamp. Unreadable/bad body ignored (dual-read `grunt-off` else config → cascade). `/solo` `/cascade` always unlink `grunt-off`
+- `spawn-mode-{sid}` — spawn session stamp. Body `solo`|`cascade`. Slash==config unlinks. Stamp only on slash not on jsonc-only. Sid-less: no stamp. Unreadable/bad body ignored (dual-read `grunt-off` else config → cascade). `/solo` `/cascade` always unlink `grunt-off`
 - `grunt-off-{sid}` — one-release dual-read as solo when spawn-mode stamp missing or body not exact `solo`|`cascade`. `/solo` `/cascade` always unlink. Requires a real sid (never the `default` fallback). Do not write new `grunt-off`
 - `auto-ask-{sid}` — leftover-gate session stamp. Body `auto`|`ask`. Slash==config unlinks. Sid-less: no stamp. Unreadable/bad body ignored (fall through config → ask). Not spawn-escape.
 

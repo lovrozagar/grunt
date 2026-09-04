@@ -2,9 +2,9 @@
 name: cascade
 description: >
   Session mode. /cascade exits solo and restores the grunt cascade for this
-  session — spawn, orchestrator, recap, need|verdict. Unlike /parent and
-  /explain this IS a mode: it persists until /solo or session end. Not a sticky
-  second mode — exit solo / restore cascade.
+  session — spawn, orchestrator, recap, need JSON. Unlike /parent and /explain
+  this IS a mode: it persists until /solo or session end. Not a sticky second
+  mode — exit solo / restore cascade.
 ---
 Exit solo / restore cascade. Not a sticky second mode.
 
@@ -14,15 +14,15 @@ This session: cascade restored. You are the parent orchestrator.
 
 - Spawn grunt|implementer|thinker.
 - Recap tags. Recap `[orchestrator]:` `[grunt]:` `[implementer]:` `[thinker]:` `[handoff]:` `[tmp]:`.
-- Spawn-first rule. `need:`/`verdict:` grammar.
-- Voice unchanged: `.rulesync/reference/output.md`. `/explain` is still the voice escape.
+- Spawn-first rule. `need:` JSON / grunt-job facts.
+- Voice unchanged: `.rulesync/reference/output.md`. `/explain` is a longer expansion.
 
 Fat-tool caps stay on — token guards, not cascade.
 
-Effective spawn: stamp body `solo`|`cascade` > one-release `grunt-off-{sid}` presence as solo > `.rulesync/grunt.config.jsonc` `spawnMode` > `cascade`. Fail-closed `cascade`. Unreadable/bad stamp body ignored (dual-read grunt-off else config). Never fail-closed solo.
+Stamp `spawn-mode-{sid}` body `cascade` when slash used and slash ≠ config; slash==config unlinks stamp. Always unlink `grunt-off-{sid}` (new+legacy). Requires real sid (never `default`). Stamp only on slash not on jsonc-only. Session-scoped, never global. Already matching config with no leftover grunt-off: no-op.
 
-Claude/Codex/Grok: `/cascade` via submit hook. If slash token equals committed config `spawnMode`, unlink `.tmp/grunt/orchestrator-logs/spawn-mode-{sid}`; else write stamp body `cascade`. Always unlink `grunt-off-{sid}` (new+legacy). Requires real sid (never `default`). Already matching config with no leftover grunt-off: no-op. Agents/Antigravity: instruction-only (this skill body); cannot unlink stamp via `/cascade`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
+LLM keys solo off effective spawnMode (stamp body `solo`|`cascade` > grunt-off presence > jsonc+overlay > cascade). UserPromptSubmit additionalContext carries the pair. Not parent Read jsonc. `/cascade` restores spawn-first even if jsonc stays solo. Hosts with no UserPromptSubmit additionalContext stay fail-closed cascade until `/solo`.
 
-`/explain` is voice-only not spawn-escape. After unlink first token = spawn.
+`/explain` is voice-only not spawn-escape. After unlink first token = spawn unless effective spawnMode is solo.
 
-After `/solo`, or when spawn/recap/need|verdict must resume. Leftover-gate `/auto`/`/ask` is not spawn-escape.
+After `/solo`, or when spawn/recap/`need:` JSON must resume. Leftover-gate `/auto`/`/ask` is not spawn-escape.

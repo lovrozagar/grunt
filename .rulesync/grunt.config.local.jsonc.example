@@ -1,0 +1,5 @@
+// Copy to grunt.config.local.jsonc (gitignored). Overlay leftoverGate/spawnMode onto committed jsonc for hook/Stop. Never rewrite AGENTS.
+{
+  "leftoverGate": "ask",
+  "spawnMode": "solo"
+}

@@ -2,21 +2,11 @@
 name: implement-plan
 description: >
   Implementer executes a local .tmp/grunt/plans checklist: continue, resume, or
-  pick among plans. Empty /implement-plan resumes a unique in-progress or
-  starts a unique ready plan; else lists and needs serial. Marks [x], skips
-  completed leaves. Not /implement review-loop, not /execute-plan PR DAG,
-  not /pickup, not /run-plan.
-when-to-use: >
-  Use when asked to "implement plan", "run plan N", "continue plan",
-  "resume plan", "execute the checklist", pick among local plans, or
-  "/implement-plan" (empty or with serial). Not leftover pick 1 / bare
-  implement (verbal spec; no this skill). Implement leftover pick 2
-  uses this sequencing without slash after write-plan persist
-  (`plan=/abs/...`). Write leftover pick 2 is write-plan inspect-pause
-  only; no this skill this turn.
-argument-hint: "[serial|path]"
+  pick among plans. Empty /implement-plan resumes a unique in-progress or starts
+  a unique ready plan; else lists and needs serial. Marks [x], skips completed
+  leaves. Not /implement review-loop, not /execute-plan PR DAG, not /pickup, not
+  /run-plan.
 ---
-
 # implement-plan
 
 Parent: spawn grunt to list/validate `.tmp/grunt/plans/` when the target is unknown or empty-arg; then spawn implementer with abs plan path + `{repo}/.rulesync/reference/plan-format.md` + first open leaf. Recap from implementer output only. No parent Read/Grep/Bash. Agent-agnostic (grunt then implementer). Not `/pickup` (handoffs only). Not `/run-plan`. Not `/execute-plan` (PR DAG).
@@ -103,13 +93,9 @@ Wait. Spawn fail → `[implementer]: failed: {err}` stop.
 Recap from implementer output only. No parent Read/Grep/Bash.
 
 ```
-[implementer]: serial={int} path=.tmp/grunt/plans/{file} status={status} done={x}/{total}
-files: {abs paths}
-{if leftover:}
-leftover:
-{up to 10 open leaf lines}
-{if blocked:} blocked: {reason}
+[implementer]: Plan {int} at .tmp/grunt/plans/{file} is {status}. Done {x}/{total}. Wrote {abs paths}.
 ```
+Open leaves and blockers stay in the sentences.
 
 ## Rules
 
@@ -120,8 +106,8 @@ leftover:
 - No auto `/write-plan` chain. Escalation → tell user to `/write-plan` a follow-up.
 - Omit `model`. `subagent_type: implementer` only for this skill.
 - First prompt sentence: `You are implementer subagent.`
-- Child prompt = task + abs paths + verdicts only (no pasted transcripts).
-- Resume prompt = `You are implementer subagent.` + new verdicts only. Do not re-send the original task. Max 3 `resume_from` per child id; then report blocked/partial.
+- Child prompt = task + abs paths + facts (no pasted transcripts).
+- Resume prompt = `You are implementer subagent.` + new facts only. Do not re-send the original task. Max 3 `resume_from` per child id; then report blocked/partial.
 - Tool-call first for spawn claims.
 - Do not re-plan. Partial = skill success (plan file is SoT).
 - `/pickup` stays handoffs only. Do not merge.

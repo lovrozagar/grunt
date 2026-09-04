@@ -11,7 +11,7 @@ Whole-prompt `/auto` only (`/auto foo` no-op). Persists until `/ask` or session 
 
 Effective leftover-gate: stamp body `auto`|`ask` > `.rulesync/grunt.config.jsonc` `leftoverGate` > `ask`. Fail-closed `ask`.
 
-Claude/Codex/Grok: `/auto` via submit hook. If slash token equals committed config `leftoverGate`, unlink `.tmp/grunt/orchestrator-logs/auto-ask-{sid}`; else write stamp body `auto`. Requires real sid (never `default`). Agents/Antigravity: instruction-only (this skill body); cannot create stamp via `/auto`; Stop still honors a pre-existing stamp if present. Session-scoped, never global.
+Slash==config leftoverGate unlinks `.tmp/grunt/orchestrator-logs/auto-ask-{sid}`; else write stamp body `auto`. Requires real sid (never `default`). Stamp only on slash not on jsonc-only. Session-scoped, never global.
 
 effective=auto + Implement-typed: write-plan persist then implement-plan `{n}`; skip leftover triple wait. Write-typed under auto still leftover wait; never spawn implementer.
 

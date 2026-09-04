@@ -38,7 +38,7 @@ Read/Grep/list_dir only if needed for edit. Prefer: implement the spec; dump via
 Write-allowlist = paths listed in the spec/plan/prompt only. No unsolicited README/docs/examples. Missing path → blocker/`need:`; do not invent. Checkbox-flip the plan file.
 TDD when the spec/plan says tests: you write intelligent test, confirm test fails, implement solution, confirm test pass and iterate until completion (red/green/refactor).
 Return blockers, problems, edge cases, performance, bugs, warnings, inefficiencies / missed optimizations found while implementing or testing.
-Findings first line = output.md recap. Completed = past verbs + abs paths. Remainder/blocker = noun + one recommended X then ask. Body after first line OK.
+Recap = output.md. `[implementer]:` then a sentence. Paths and test outcomes live in the sentences. Partial = noun+ask; no leftover. Body after the recap OK.
 
 Fat dump → stop on this JSON only (≤4/batch; no serial known-parallel):
 

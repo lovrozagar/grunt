@@ -14,17 +14,12 @@ const TRANSCRIPT_PREFIX =
   /^\s*(?:\[(?:orchestrator|router|implementer|thinker|grunt)\]:|Human:|Assistant:)\s*/i;
 const YOU_ARE_SUBAGENT =
   /^\s*You are (?:grunt|implementer|thinker) subagent\b/;
-const VERDICT_LINE = /^\s*verdict:\s*/;
 
 export function stripTranscripts(text) {
   const lines = String(text).split(/\n/);
   const out = [];
   let keptYouAre = false;
   for (const line of lines) {
-    if (VERDICT_LINE.test(line)) {
-      out.push(line);
-      continue;
-    }
     if (TRANSCRIPT_PREFIX.test(line)) continue;
     if (YOU_ARE_SUBAGENT.test(line)) {
       if (keptYouAre) continue;
@@ -33,44 +28,6 @@ export function stripTranscripts(text) {
     out.push(line);
   }
   return out.join("\n");
-}
-
-export function extractVerdictBlocks(text) {
-  const rawLines = String(text).split(/\n/);
-  const lines = [];
-  for (const line of rawLines) {
-    const idx = line.search(/(?:^|\s)verdict:\s/);
-    if (idx > 0) {
-      const before = line.slice(0, idx).trimEnd();
-      const after = line.slice(idx).trimStart();
-      if (before) lines.push(before);
-      lines.push(after);
-    } else {
-      lines.push(line);
-    }
-  }
-  const body = [];
-  const blocks = [];
-  let current = null;
-  for (const line of lines) {
-    if (VERDICT_LINE.test(line)) {
-      if (current) blocks.push(current.join("\n"));
-      current = [line];
-      continue;
-    }
-    if (current) {
-      if (current.length < 8) current.push(line);
-      else {
-        blocks.push(current.join("\n"));
-        current = null;
-        body.push(line);
-      }
-      continue;
-    }
-    body.push(line);
-  }
-  if (current) blocks.push(current.join("\n"));
-  return { body: body.join("\n"), blocks };
 }
 
 export function truncatePrompt(text, _max = MAX_PROMPT_CHARS) {
@@ -113,14 +70,10 @@ export function stripInlineTranscripts(text) {
 
 export function capSpawnPrompt(prompt) {
   let s = stripTranscripts(String(prompt));
-  const extracted = extractVerdictBlocks(s);
-  s = scrubText(extracted.body, { intent: true });
+  s = scrubText(s, { intent: true });
   s = stripTranscripts(s);
   s = stripInlineTranscripts(s);
-  const again = extractVerdictBlocks(s);
-  const blocks = extracted.blocks.concat(again.blocks);
-  const verdictPart = blocks.length ? "\n" + blocks.join("\n") : "";
-  return (again.body + verdictPart).trim();
+  return s.trim();
 }
 
 const SPAWN_TYPE_KEYS = ["subagent_type", "subagentType", "name", "type", "agent"];
